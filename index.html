@@ -219,6 +219,7 @@ function renderAdmin(){
       <div style="font-size:16px;font-weight:600">🌴 Admin <span class="badge ${saving?"saving":""}">${saving?"⏳ Guardando...":"☁ Sincronizado"}</span></div>
       <div style="display:flex;gap:8px">
         <button class="btn sm" id="btnExport">Exportar CSV</button>
+        <button class="btn sm" id="btnBorrarTodo" style="background:#ff6b6b;border-color:#cc4444;color:#fff">🗑 Borrar todo</button>
         <button class="btn sm" id="btnSalirAdmin">Salir</button>
       </div>
     </div>
@@ -342,8 +343,9 @@ function renderAdmin(){
               </div>
             </div>
             ${!p.pendienteAprobacion?`
-              <div style="margin-top:8px">
+              <div style="margin-top:8px;display:flex;gap:8px">
                 <button class="btn full" style="font-size:12px;padding:7px 0" data-wa="${p.code}">📲 Enviar ticket por WhatsApp</button>
+                <button class="btn sm" style="background:#ff6b6b;border-color:#cc4444;color:#fff;white-space:nowrap" data-eliminar="${p.code}">🗑</button>
               </div>
               <div style="margin-top:6px;cursor:pointer" data-toggle="${p.code}">
                 <div style="font-size:11px;color:#4a9eff">${state.selectedTicket===p.code?"Ocultar ticket ▲":"Ver ticket ▼"}</div>
@@ -451,7 +453,13 @@ function bindEvents(){
   q("#lnkVolver")?.addEventListener("click",e=>{e.preventDefault();state.view="login";render();});
 
   // ADMIN
-  q("#btnExport")?.addEventListener("click",exportCSV);
+  q("#btnBorrarTodo")?.addEventListener("click",()=>{
+    if(confirm("⚠️ ¿Seguro que quieres borrar TODOS los registros? Esta acción no se puede deshacer.")) doBorrarTodo();
+  });
+  document.querySelectorAll("[data-eliminar]").forEach(el=>el.addEventListener("click",e=>{
+    e.stopPropagation();
+    if(confirm(`¿Eliminar este registro?`)) doEliminar(el.dataset.eliminar);
+  }));
   q("#btnSalirAdmin")?.addEventListener("click",salir);
   q("#btnEnviarLink")?.addEventListener("click",()=>{
     const msg=`Hola! 🌴 Ya confirmamos tu pago para la Fiesta Tropical de Buseta.\n\nPara quedar inscrito en la lista, abre este link y completa tus datos:\n\nhttps://fiesta-tropical-buseta.vercel.app\n\n¡Nos vemos en la fiesta! 🎉`;
@@ -534,6 +542,19 @@ async function doRegistro(){
     await setData([...data,person]);
     renderRegistroOk(nombre);
   }catch(e){document.getElementById("root").innerHTML=renderRegistro("Error al guardar: "+e.message);bindEvents();}
+}
+
+async function doBorrarTodo(){
+  state.saving=true; render();
+  await setData([]);
+  state.attendees=[]; state.saving=false; render();
+}
+
+async function doEliminar(code){
+  const updated=state.attendees.filter(a=>a.code!==code);
+  state.saving=true; render();
+  await setData(updated);
+  state.attendees=updated; state.saving=false; render();
 }
 
 async function doAprobar(code){
