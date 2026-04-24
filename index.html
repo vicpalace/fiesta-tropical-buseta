@@ -81,8 +81,8 @@ let state = {
 
 function genCode(){
   const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s="BUS-";
-  for(let i=0;i<8;i++) s+=c[Math.floor(Math.random()*c.length)];
+  let s="FTB";
+  for(let i=0;i<7;i++) s+=c[Math.floor(Math.random()*c.length)];
   return s;
 }
 
@@ -357,7 +357,7 @@ function renderAdmin(){
   </div>`;
 }
 
-function renderTicket(p){
+function renderTicket(p, showBtn=false){
   const used=p.usedEntries||0,total=p.totalEntries||2,left=total-used;
   const blocked=left===0;
   const dots=Array.from({length:total}).map((_,i)=>`<div class="entry-dot" style="background:${i<used?"#ff6b6b":"#1dd1a1"};color:#fff">${i<used?"X":"✓"}</div>`).join("");
@@ -377,6 +377,7 @@ function renderTicket(p){
         <div style="font-size:10px;color:#aaa;margin-top:6px">${left} de ${total} disponibles</div>
       </div>
     </div>
+    ${showBtn && !blocked ? `<button class="btn full" style="margin-top:12px;font-size:13px" data-entrada="${p.code}">+ Registrar otra entrada</button>` : ""}
   </div>`;
 }
 
@@ -429,7 +430,7 @@ function renderPuerta(){
                 <div style="font-size:11px;color:${p.pagado?"#1dd1a1":"#ffb400"}">${p.pagado?"Pagado":"Pendiente"}</div>
               </div>
             </div>
-            ${state.selectedTicket===p.code?renderTicket(p):""}
+            ${state.selectedTicket===p.code?renderTicket(p, true):""}
           </div>`;
         }).join("")}
       </div>
@@ -483,11 +484,10 @@ function bindEvents(){
   q("#codeInput")?.addEventListener("keydown",e=>{if(e.key==="Enter")doValidar(e.target.value);});
   q("#codeInput")?.addEventListener("input",e=>{state.manualCode=e.target.value.toUpperCase();});
   q("#searchPuerta")?.addEventListener("input",e=>{state.search=e.target.value;render();});
-  q("#btnOtraEntrada")?.addEventListener("click",()=>{
-    const code=state.scanMsg?.code;
-    state.scanMsg=null;
-    if(code) doValidar(code);
-  });
+  document.querySelectorAll("[data-entrada]").forEach(el=>el.addEventListener("click",e=>{
+    e.stopPropagation();
+    doValidar(el.dataset.entrada);
+  }));
 }
 
 function q(sel){return document.querySelector(sel);}
