@@ -18,6 +18,8 @@
     button.btn.full{width:100%;padding:12px 0}
     button.btn.sm{font-size:12px;padding:6px 12px}
     button.btn.dim{opacity:0.6}
+    button.btn.red{background:#ff6b6b;border-color:#cc4444;color:#fff}
+    button.btn.red:hover{background:#cc2222;border-color:#991111;color:#fff}
     .card{background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:20px;padding:2rem;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
     .tag{font-size:10px;padding:3px 8px;border-radius:6px;font-weight:600}
     .tag.warn{background:rgba(255,180,0,0.15);color:#ffb400}
@@ -32,9 +34,7 @@
     .panel{background:#16213e;border-radius:12px;padding:14px 16px;margin-bottom:10px}
     .panel.warn-border{border:1.5px solid #ffb400}
     .error{color:#ff6b6b;font-size:12px;margin-bottom:10px}
-    .success-screen{text-align:center;padding:1rem 0}
     .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-    #qr-container canvas,#qr-container img{border-radius:6px}
     .ticket{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);border-radius:16px;padding:14px;color:#fff;max-width:320px;margin:10px auto;position:relative;overflow:hidden}
     .entries{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
     .entry-dot{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700}
@@ -44,39 +44,25 @@
     .msg.warn{background:rgba(255,180,0,0.1);border:1px solid rgba(255,180,0,0.3)}
     .badge{font-size:10px;color:#1dd1a1;margin-left:8px}
     .badge.saving{color:#ffb400}
-    h2{font-size:16px;font-weight:600;margin-bottom:16px}
-    .sep{border:none;border-top:1px solid #222;margin:8px 0}
-    a{color:#ffb400;text-decoration:none}
     .max400{max-width:400px;margin:0 auto;width:100%}
     .max700{max-width:700px;margin:0 auto;width:100%}
+    a{color:#ffb400;text-decoration:none}
   </style>
 </head>
 <body>
-
 <div id="root"></div>
-
 <script>
-const JSONBIN_KEY = "$2a$10$/QHNoYB2rr3sGHNL7Y6uFOIkKASbLa2mWI3CXBXVeIiy0X/HPTs.K";
-const BIN_ID = "69ebd16436566621a8eadb62";
-const PASS_ADMIN = "admin123";
-const PASS_PUERTA = "puerta2024";
-const PRECIO_KEY = "ftb_precio";
+const JSONBIN_KEY="$2a$10$/QHNoYB2rr3sGHNL7Y6uFOIkKASbLa2mWI3CXBXVeIiy0X/HPTs.K";
+const BIN_ID="69ebd16436566621a8eadb62";
+const PASS_ADMIN="admin123";
+const PASS_PUERTA="puerta2024";
+const PRECIO_KEY="ftb_precio";
 
-let state = {
-  view: "login", // login | registro | admin | puerta
-  attendees: [],
-  saving: false,
-  loading: false,
-  tab: "lista", // lista | pendientes | resumen
-  search: "",
-  scanMsg: null,
-  manualCode: "",
-  selectedTicket: null,
-  precio: parseInt(localStorage.getItem(PRECIO_KEY)||"35000"),
-  editandoPrecio: false,
-  editPromos: {},
-  pollInterval: null,
-  passErr: "",
+let state={
+  view:"login",attendees:[],saving:false,loading:false,
+  tab:"lista",search:"",scanMsg:null,manualCode:"",
+  selectedTicket:null,precio:parseInt(localStorage.getItem(PRECIO_KEY)||"35000"),
+  editandoPrecio:false,editPromos:{},pollInterval:null,passErr:""
 };
 
 function genCode(){
@@ -94,8 +80,7 @@ async function getData(){
 
 async function setData(attendees){
   await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
-    method:"PUT",
-    headers:{"Content-Type":"application/json","X-Master-Key":JSONBIN_KEY},
+    method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":JSONBIN_KEY},
     body:JSON.stringify({attendees})
   });
 }
@@ -110,12 +95,33 @@ function exportCSV(){
   URL.revokeObjectURL(u);
 }
 
-function renderQR(el, code, size=90){
+function renderQR(el,code,size=90){
   el.innerHTML="";
   new QRCode(el,{text:code,width:size,height:size,colorDark:"#1a1a2e",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
 }
 
-// ─── RENDER ──────────────────────────────────────────────────────────────────
+function renderTicket(p,showBtn=false){
+  const used=p.usedEntries||0,total=p.totalEntries||2,left=total-used,blocked=left===0;
+  const dots=Array.from({length:total}).map((_,i)=>`<div class="entry-dot" style="background:${i<used?"#ff6b6b":"#1dd1a1"};color:#fff">${i<used?"X":"✓"}</div>`).join("");
+  return `
+  <div class="ticket" style="margin-top:10px">
+    <div class="row" style="margin-bottom:10px">
+      <div><div style="font-size:10px;letter-spacing:2px;color:#ffb400;font-weight:500;text-transform:uppercase">Fiesta Tropical</div><div style="font-size:12px;color:#aaa">de Buseta</div></div>
+      <span class="tag ${blocked?"err":"ok"}">${blocked?"Bloqueado":"Activo"}</span>
+    </div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:10px">${p.nombre}</div>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div data-qr="${p.code}" data-size="80" style="background:#fff;padding:4px;border-radius:6px;display:inline-block"></div>
+      <div>
+        <div style="font-size:10px;color:#aaa">Código</div>
+        <div style="font-family:monospace;font-size:12px;color:#ffb400;letter-spacing:1px;margin-bottom:8px">${p.code}</div>
+        <div class="entries">${dots}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:6px">${left} de ${total} disponibles</div>
+      </div>
+    </div>
+    ${showBtn&&!blocked?`<button class="btn full" style="margin-top:12px;font-size:13px" data-entrada="${p.code}">+ Registrar otra entrada</button>`:""}
+  </div>`;
+}
 
 function render(){
   const root=document.getElementById("root");
@@ -124,102 +130,74 @@ function render(){
   else if(state.view==="admin") root.innerHTML=renderAdmin();
   else if(state.view==="puerta") root.innerHTML=renderPuerta();
   bindEvents();
-  // QR rendering after DOM
-  document.querySelectorAll("[data-qr]").forEach(el=>{
-    renderQR(el,el.dataset.qr,parseInt(el.dataset.size||90));
-  });
+  document.querySelectorAll("[data-qr]").forEach(el=>renderQR(el,el.dataset.qr,parseInt(el.dataset.size||90)));
 }
 
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
 function renderLogin(){
-  return `
-  <div class="center">
-    <div class="card">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:3rem">🌴</div>
-        <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
-        <div style="font-size:13px;color:#aaa;margin-top:4px">Sistema de gestión de tickets</div>
-      </div>
-      <input id="pass" type="password" placeholder="Contraseña (admin o puerta)" />
-      ${state.passErr?`<div class="error">${state.passErr}</div>`:""}
-      <div class="grid2" style="margin-bottom:10px">
-        <button class="btn full" id="btnAdmin">Admin</button>
-        <button class="btn full" id="btnPuerta">Puerta</button>
-      </div>
-      <button class="btn full" id="btnRegistro" style="font-size:13px">🎟️ Registrarme como asistente</button>
-      <div style="margin-top:12px;font-size:11px;color:#555;text-align:center">Admin: ${PASS_ADMIN} · Puerta: ${PASS_PUERTA}</div>
+  return `<div class="center"><div class="card">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:3rem">🌴</div>
+      <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
+      <div style="font-size:13px;color:#aaa;margin-top:4px">Sistema de gestión de tickets</div>
     </div>
-  </div>`;
+    <input id="pass" type="password" placeholder="Contraseña (admin o puerta)" />
+    ${state.passErr?`<div class="error">${state.passErr}</div>`:""}
+    <div class="grid2" style="margin-bottom:10px">
+      <button class="btn full" id="btnAdmin">Admin</button>
+      <button class="btn full" id="btnPuerta">Puerta</button>
+    </div>
+    <button class="btn full" id="btnRegistro" style="font-size:13px">🎟️ Registrarme como asistente</button>
+    <div style="margin-top:12px;font-size:11px;color:#555;text-align:center">Admin: ${PASS_ADMIN} · Puerta: ${PASS_PUERTA}</div>
+  </div></div>`;
 }
 
-// ─── REGISTRO PÚBLICO ─────────────────────────────────────────────────────────
 function renderRegistro(err){
-  return `
-  <div class="center">
-    <div class="card">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:3rem">🌴</div>
-        <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
-        <div style="font-size:13px;color:#aaa;margin-top:4px">Completa tus datos para quedar inscrito</div>
-      </div>
-      ${err?`<div class="error">${err}</div>`:""}
-      <input id="reg_nombre" placeholder="Nombre completo" />
-      <input id="reg_cedula" placeholder="Cédula de ciudadanía" />
-      <input id="reg_telefono" placeholder="Celular (ej: 3001234567)" />
-      <input id="reg_correo" placeholder="Correo electrónico" type="email" />
-      <button class="btn full" id="btnEnviarReg" style="margin-top:6px">Registrarme →</button>
-      <div style="font-size:11px;color:#555;text-align:center;margin-top:14px;line-height:1.5">Una vez confirmado tu pago, recibirás tu ticket por WhatsApp 🎉</div>
-      <div style="text-align:center;margin-top:12px"><a href="#" id="lnkVolver" style="font-size:12px">← Volver</a></div>
+  return `<div class="center"><div class="card">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:3rem">🌴</div>
+      <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
+      <div style="font-size:13px;color:#aaa;margin-top:4px">Completa tus datos para quedar inscrito</div>
     </div>
-  </div>`;
+    ${err?`<div class="error">${err}</div>`:""}
+    <input id="reg_nombre" placeholder="Nombre completo" />
+    <input id="reg_cedula" placeholder="Cédula de ciudadanía" />
+    <input id="reg_telefono" placeholder="Celular (ej: 3001234567)" />
+    <input id="reg_correo" placeholder="Correo electrónico" type="email" />
+    <button class="btn full" id="btnEnviarReg" style="margin-top:6px">Registrarme →</button>
+    <div style="font-size:11px;color:#555;text-align:center;margin-top:14px;line-height:1.5">Una vez confirmado tu pago, recibirás tu ticket por WhatsApp 🎉</div>
+    <div style="text-align:center;margin-top:12px"><a href="#" id="lnkVolver">← Volver</a></div>
+  </div></div>`;
 }
 
 function renderRegistroOk(nombre){
-  document.getElementById("root").innerHTML=`
-  <div class="center">
-    <div class="card">
-      <div class="success-screen">
-        <div style="font-size:4rem;margin-bottom:16px">🎉</div>
-        <div style="font-size:1.4rem;font-weight:700;color:#1dd1a1;margin-bottom:8px">¡Registro exitoso!</div>
-        <p style="font-size:14px;color:#aaa;line-height:1.7">Hola <strong style="color:#fff">${nombre}</strong>, tus datos quedaron registrados.<br><br>En breve confirmaremos tu pago y recibirás tu ticket con el código de entrada por WhatsApp.</p>
-        <p style="margin-top:1.5rem;color:#ffb400;font-size:14px">¡Nos vemos en la fiesta! 🌴</p>
-      </div>
+  document.getElementById("root").innerHTML=`<div class="center"><div class="card">
+    <div style="text-align:center;padding:1rem 0">
+      <div style="font-size:4rem;margin-bottom:16px">🎉</div>
+      <div style="font-size:1.4rem;font-weight:700;color:#1dd1a1;margin-bottom:8px">¡Registro exitoso!</div>
+      <p style="font-size:14px;color:#aaa;line-height:1.7">Hola <strong style="color:#fff">${nombre}</strong>, tus datos quedaron registrados.<br><br>En breve confirmaremos tu pago y recibirás tu ticket con el código de entrada por WhatsApp.</p>
+      <p style="margin-top:1.5rem;color:#ffb400;font-size:14px">¡Nos vemos en la fiesta! 🌴</p>
     </div>
-  </div>`;
+  </div></div>`;
 }
 
-// ─── ADMIN ────────────────────────────────────────────────────────────────────
 function renderAdmin(){
   const {attendees,saving,loading,tab,search,precio,editandoPrecio}=state;
   const pagados=attendees.filter(a=>a.pagado);
   const pendientes=attendees.filter(a=>a.pendienteAprobacion);
-  const stats={
-    total:attendees.length,
-    pagados:pagados.length,
-    pendientes:pendientes.length,
-    usadas:attendees.reduce((s,a)=>s+(a.usedEntries||0),0)
-  };
-
-  const filtered=attendees.filter(a=>
-    (a.nombre||"").toLowerCase().includes(search.toLowerCase())||
-    (a.cedula||"").includes(search)||
-    (a.code||"").includes(search.toUpperCase())
-  );
-
-  // Resumen financiero
+  const stats={total:attendees.length,pagados:pagados.length,pendientes:pendientes.length,usadas:attendees.reduce((s,a)=>s+(a.usedEntries||0),0)};
+  const filtered=attendees.filter(a=>(a.nombre||"").toLowerCase().includes(search.toLowerCase())||(a.cedula||"").includes(search)||(a.code||"").toUpperCase().includes(search.toUpperCase()));
   const totalPromos=pagados.reduce((s,a)=>s+(a.promos||0),0);
   const totalRecolectado=totalPromos*precio;
   const totalAsistentes=pagados.reduce((s,a)=>s+(a.totalEntries||0),0);
   const desglose={};
   pagados.forEach(a=>{const p=a.promos||0;desglose[p]=(desglose[p]||0)+1;});
 
-  return `
-  <div class="max700" style="padding:1rem">
+  return `<div class="max700" style="padding:1rem">
     <div class="row" style="margin-bottom:16px">
       <div style="font-size:16px;font-weight:600">🌴 Admin <span class="badge ${saving?"saving":""}">${saving?"⏳ Guardando...":"☁ Sincronizado"}</span></div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn sm" id="btnExport">Exportar CSV</button>
-        <button class="btn sm" id="btnBorrarTodo" style="background:#ff6b6b;border-color:#cc4444;color:#fff">🗑 Borrar todo</button>
+        <button class="btn sm red" id="btnBorrarTodo">🗑 Borrar todo</button>
         <button class="btn sm" id="btnSalirAdmin">Salir</button>
       </div>
     </div>
@@ -247,105 +225,101 @@ function renderAdmin(){
 
     ${loading?`<div style="text-align:center;padding:40px;color:#aaa">Cargando...</div>`:""}
 
-    ${!loading && tab==="pendientes"?`
-      <div>
-        ${pendientes.length===0?`<div style="text-align:center;padding:30px;color:#aaa">No hay registros pendientes 🎉</div>`:""}
-        ${pendientes.map(p=>`
-          <div class="panel warn-border" id="panel_${p.code}">
-            <div class="row" style="margin-bottom:10px">
-              <div>
-                <div style="font-size:15px;font-weight:600">${p.nombre}</div>
-                <div style="font-size:12px;color:#aaa">CC ${p.cedula} · ${p.telefono}</div>
-                <div style="font-size:12px;color:#aaa">${p.correo}</div>
-                <div style="font-size:11px;color:#555;margin-top:4px">${p.fecha} · ${p.code}</div>
-              </div>
-              <span class="tag warn">⏳ Pendiente</span>
+    ${!loading&&tab==="pendientes"?`<div>
+      ${pendientes.length===0?`<div style="text-align:center;padding:30px;color:#aaa">No hay registros pendientes 🎉</div>`:""}
+      ${pendientes.map(p=>`
+        <div class="panel warn-border">
+          <div class="row" style="margin-bottom:10px">
+            <div>
+              <div style="font-size:15px;font-weight:600">${p.nombre}</div>
+              <div style="font-size:12px;color:#aaa">CC ${p.cedula} · ${p.telefono}</div>
+              <div style="font-size:12px;color:#aaa">${p.correo}</div>
+              <div style="font-size:11px;color:#555;margin-top:4px">${p.fecha} · ${p.code}</div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <label style="font-size:13px;color:#aaa;white-space:nowrap">Promos 2x1:</label>
-              <input type="number" min="1" max="10" value="${state.editPromos[p.code]||1}" data-code="${p.code}" class="promo-input" style="width:60px;margin-bottom:0" />
-              <span style="font-size:12px;color:#aaa" id="entries_${p.code}">${(state.editPromos[p.code]||1)*2} entradas</span>
-              <button class="btn sm" style="margin-left:auto" data-aprobar="${p.code}">✓ Aprobar</button>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+              <span class="tag warn">⏳ Pendiente</span>
+              <button class="btn sm red" data-eliminar="${p.code}">🗑 Eliminar</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:13px;color:#aaa;white-space:nowrap">Promos 2x1:</label>
+            <input type="number" min="1" max="10" value="${state.editPromos[p.code]||1}" data-code="${p.code}" class="promo-input" style="width:60px;margin-bottom:0"/>
+            <span style="font-size:12px;color:#aaa" id="entries_${p.code}">${(state.editPromos[p.code]||1)*2} entradas</span>
+            <button class="btn sm" style="margin-left:auto" data-aprobar="${p.code}">✓ Aprobar</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>`:""}
+
+    ${!loading&&tab==="resumen"?`<div>
+      <div class="panel row" style="margin-bottom:12px">
+        <div>
+          <div style="font-size:12px;color:#aaa">Precio por promo 2x1</div>
+          ${editandoPrecio?`
+            <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+              <input id="inputPrecio" type="number" value="${precio}" style="width:120px;margin-bottom:0"/>
+              <button class="btn sm" id="btnGuardarPrecio">Guardar</button>
+            </div>
+          `:`<div style="font-size:20px;font-weight:700;margin-top:4px">$${precio.toLocaleString("es-CO")}</div>`}
+        </div>
+        ${!editandoPrecio?`<button class="btn sm" id="btnEditarPrecio">✏️ Editar</button>`:""}
+      </div>
+      <div class="grid2" style="margin-bottom:12px">
+        <div style="background:linear-gradient(135deg,#1a1a2e,#0f3460);border-radius:12px;padding:16px">
+          <div style="font-size:11px;color:#ffb400;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Total recolectado</div>
+          <div style="font-size:26px;font-weight:700;color:#1dd1a1">$${totalRecolectado.toLocaleString("es-CO")}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:4px">${totalPromos} promos × $${precio.toLocaleString("es-CO")}</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#1a1a2e,#0f3460);border-radius:12px;padding:16px">
+          <div style="font-size:11px;color:#ffb400;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Total asistentes</div>
+          <div style="font-size:26px;font-weight:700">${totalAsistentes}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:4px">${pagados.length} compradores + ${totalAsistentes-pagados.length} invitados</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="font-size:13px;font-weight:600;margin-bottom:12px">Desglose por compra</div>
+        ${Object.keys(desglose).length===0?`<div style="font-size:12px;color:#aaa">Sin datos aún</div>`:""}
+        ${Object.entries(desglose).sort((a,b)=>a[0]-b[0]).map(([p,c])=>`
+          <div class="row" style="padding:8px 0;border-bottom:1px solid #222">
+            <div><span style="font-size:13px;font-weight:500">${p} promo${p>1?"s":""} 2x1</span><span style="font-size:12px;color:#aaa;margin-left:8px">(${p*2} entradas)</span></div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:600">${c} persona${c>1?"s":""}</div>
+              <div style="font-size:11px;color:#aaa">$${(c*p*precio).toLocaleString("es-CO")}</div>
             </div>
           </div>
         `).join("")}
+        ${Object.keys(desglose).length>0?`
+          <div class="row" style="padding-top:10px;margin-top:4px">
+            <div style="font-weight:700">Total</div>
+            <div style="font-size:15px;font-weight:700;color:#1dd1a1">$${totalRecolectado.toLocaleString("es-CO")}</div>
+          </div>
+        `:""}
       </div>
-    `:""}
+    </div>`:""}
 
-    ${!loading && tab==="resumen"?`
-      <div>
-        <div class="panel row" style="margin-bottom:12px">
-          <div>
-            <div style="font-size:12px;color:#aaa">Precio por promo 2x1</div>
-            ${editandoPrecio?`
-              <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-                <input id="inputPrecio" type="number" value="${precio}" style="width:120px;margin-bottom:0"/>
-                <button class="btn sm" id="btnGuardarPrecio">Guardar</button>
-              </div>
-            `:`<div style="font-size:20px;font-weight:700;margin-top:4px">$${precio.toLocaleString("es-CO")}</div>`}
-          </div>
-          ${!editandoPrecio?`<button class="btn sm" id="btnEditarPrecio">✏️ Editar</button>`:""}
-        </div>
-        <div class="grid2" style="margin-bottom:12px">
-          <div style="background:linear-gradient(135deg,#1a1a2e,#0f3460);border-radius:12px;padding:16px">
-            <div style="font-size:11px;color:#ffb400;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Total recolectado</div>
-            <div style="font-size:26px;font-weight:700;color:#1dd1a1">$${totalRecolectado.toLocaleString("es-CO")}</div>
-            <div style="font-size:11px;color:#aaa;margin-top:4px">${totalPromos} promos × $${precio.toLocaleString("es-CO")}</div>
-          </div>
-          <div style="background:linear-gradient(135deg,#1a1a2e,#0f3460);border-radius:12px;padding:16px">
-            <div style="font-size:11px;color:#ffb400;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Total asistentes</div>
-            <div style="font-size:26px;font-weight:700">${totalAsistentes}</div>
-            <div style="font-size:11px;color:#aaa;margin-top:4px">${pagados.length} compradores + ${totalAsistentes-pagados.length} invitados</div>
-          </div>
-        </div>
-        <div class="panel">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px">Desglose por compra</div>
-          ${Object.keys(desglose).length===0?`<div style="font-size:12px;color:#aaa">Sin datos aún</div>`:""}
-          ${Object.entries(desglose).sort((a,b)=>a[0]-b[0]).map(([p,c])=>`
-            <div class="row" style="padding:8px 0;border-bottom:1px solid #222">
-              <div>
-                <span style="font-size:13px;font-weight:500">${p} promo${p>1?"s":""} 2x1</span>
-                <span style="font-size:12px;color:#aaa;margin-left:8px">(${p*2} entradas)</span>
-              </div>
-              <div style="text-align:right">
-                <div style="font-size:13px;font-weight:600">${c} persona${c>1?"s":""}</div>
-                <div style="font-size:11px;color:#aaa">$${(c*p*precio).toLocaleString("es-CO")}</div>
-              </div>
-            </div>
-          `).join("")}
-          ${Object.keys(desglose).length>0?`
-            <div class="row" style="padding-top:10px;margin-top:4px">
-              <div style="font-weight:700">Total</div>
-              <div style="font-size:15px;font-weight:700;color:#1dd1a1">$${totalRecolectado.toLocaleString("es-CO")}</div>
-            </div>
-          `:""}
-        </div>
-      </div>
-    `:""}
-
-    ${!loading && tab==="lista"?`
+    ${!loading&&tab==="lista"?`
       <input id="searchInput" placeholder="Buscar por nombre, cédula o código..." value="${search}" style="width:100%;margin-bottom:12px"/>
       <div>
         ${filtered.length===0?`<div style="text-align:center;padding:20px;color:#aaa">Sin resultados</div>`:""}
         ${filtered.map(p=>{
           const left=(p.totalEntries||0)-(p.usedEntries||0);
           return `
-          <div class="panel" style="border:0.5px solid ${p.pendienteAprobacion?"#ffb400":"#222"}">
+          <div class="panel" style="border:0.5px solid ${p.pendienteAprobacion?"#ffb400":"#333"}">
             <div class="row">
               <div>
-                <div style="font-size:14px;font-weight:600">${p.nombre} ${p.pendienteAprobacion?`<span class="tag warn" style="font-size:9px">⏳ Por aprobar</span>`:""}</div>
+                <div style="font-size:14px;font-weight:600">${p.nombre} ${p.pendienteAprobacion?`<span class="tag warn" style="font-size:9px">⏳</span>`:""}</div>
                 <div style="font-size:12px;color:#aaa">CC ${p.cedula} · ${p.telefono} · ${p.correo}</div>
                 <div style="font-size:11px;color:#555;margin-top:2px">${p.code} · ${p.fecha} · ${p.promos||0} promo(s)</div>
               </div>
-              <div style="text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+              <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
                 ${!p.pendienteAprobacion?`<button class="btn sm" data-pago="${p.code}">${p.pagado?"✓ Pagado":"Pendiente"}</button>`:""}
                 <div style="font-size:11px;color:${left===0?"#ff6b6b":"#1dd1a1"};font-weight:600">${p.usedEntries||0}/${p.totalEntries||0} usadas</div>
+                <button class="btn sm red" data-eliminar="${p.code}">🗑</button>
               </div>
             </div>
             ${!p.pendienteAprobacion?`
               <div style="margin-top:8px;display:flex;gap:8px">
                 <button class="btn full" style="font-size:12px;padding:7px 0" data-wa="${p.code}">📲 Enviar ticket por WhatsApp</button>
-                <button class="btn sm" style="background:#ff6b6b;border-color:#cc4444;color:#fff;white-space:nowrap" data-eliminar="${p.code}">🗑</button>
               </div>
               <div style="margin-top:6px;cursor:pointer" data-toggle="${p.code}">
                 <div style="font-size:11px;color:#4a9eff">${state.selectedTicket===p.code?"Ocultar ticket ▲":"Ver ticket ▼"}</div>
@@ -359,47 +333,17 @@ function renderAdmin(){
   </div>`;
 }
 
-function renderTicket(p, showBtn=false){
-  const used=p.usedEntries||0,total=p.totalEntries||2,left=total-used;
-  const blocked=left===0;
-  const dots=Array.from({length:total}).map((_,i)=>`<div class="entry-dot" style="background:${i<used?"#ff6b6b":"#1dd1a1"};color:#fff">${i<used?"X":"✓"}</div>`).join("");
-  return `
-  <div class="ticket" style="margin-top:10px">
-    <div class="row" style="margin-bottom:10px">
-      <div><div style="font-size:10px;letter-spacing:2px;color:#ffb400;font-weight:500;text-transform:uppercase">Fiesta Tropical</div><div style="font-size:12px;color:#aaa">de Buseta</div></div>
-      <span class="tag ${blocked?"err":"ok"}">${blocked?"Bloqueado":"Activo"}</span>
-    </div>
-    <div style="font-size:16px;font-weight:600;margin-bottom:10px">${p.nombre}</div>
-    <div style="display:flex;gap:12px;align-items:center">
-      <div data-qr="${p.code}" data-size="80" style="background:#fff;padding:4px;border-radius:6px;display:inline-block"></div>
-      <div>
-        <div style="font-size:10px;color:#aaa">Código</div>
-        <div style="font-family:monospace;font-size:12px;color:#ffb400;letter-spacing:1px;margin-bottom:8px">${p.code}</div>
-        <div class="entries">${dots}</div>
-        <div style="font-size:10px;color:#aaa;margin-top:6px">${left} de ${total} disponibles</div>
-      </div>
-    </div>
-    ${showBtn && !blocked ? `<button class="btn full" style="margin-top:12px;font-size:13px" data-entrada="${p.code}">+ Registrar otra entrada</button>` : ""}
-  </div>`;
-}
-
-// ─── PUERTA ───────────────────────────────────────────────────────────────────
 function renderPuerta(){
-  const {attendees,saving,loading,search,scanMsg,manualCode}=state;
-  const filtered=attendees.filter(a=>
-    (a.nombre||"").toLowerCase().includes(search.toLowerCase())||
-    (a.cedula||"").includes(search)||
-    (a.code||"").toUpperCase().includes(search.toUpperCase())
-  );
-  return `
-  <div class="max400" style="padding:1rem">
+  const {attendees,saving,loading,search,scanMsg}=state;
+  const filtered=attendees.filter(a=>(a.nombre||"").toLowerCase().includes(search.toLowerCase())||(a.cedula||"").includes(search)||(a.code||"").toUpperCase().includes(search.toUpperCase()));
+  return `<div class="max400" style="padding:1rem">
     <div class="row" style="margin-bottom:16px">
       <div style="font-size:16px;font-weight:600">🚪 Control de puerta <span class="badge ${saving?"saving":""}">${saving?"⏳":"☁"}</span></div>
       <button class="btn sm" id="btnSalirPuerta">Salir</button>
     </div>
     ${loading?`<div style="text-align:center;padding:30px;color:#aaa">Cargando lista...</div>`:`
       <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input id="codeInput" placeholder="Código BUS-..." value="${manualCode}" style="margin-bottom:0;flex:1"/>
+        <input id="codeInput" placeholder="Código FTB..." value="${state.manualCode}" style="margin-bottom:0;flex:1"/>
         <button class="btn" id="btnValidar">Validar</button>
       </div>
       ${scanMsg?`
@@ -432,7 +376,7 @@ function renderPuerta(){
                 <div style="font-size:11px;color:${p.pagado?"#1dd1a1":"#ffb400"}">${p.pagado?"Pagado":"Pendiente"}</div>
               </div>
             </div>
-            ${state.selectedTicket===p.code?renderTicket(p, true):""}
+            ${state.selectedTicket===p.code?renderTicket(p,true):""}
           </div>`;
         }).join("")}
       </div>
@@ -440,26 +384,17 @@ function renderPuerta(){
   </div>`;
 }
 
-// ─── EVENTOS ──────────────────────────────────────────────────────────────────
 function bindEvents(){
-  // LOGIN
   q("#btnAdmin")?.addEventListener("click",()=>doLogin("admin"));
   q("#btnPuerta")?.addEventListener("click",()=>doLogin("puerta"));
   q("#btnRegistro")?.addEventListener("click",()=>{state.view="registro";render();});
   q("#pass")?.addEventListener("keydown",e=>{if(e.key==="Enter")doLogin("admin");});
-
-  // REGISTRO
   q("#btnEnviarReg")?.addEventListener("click",doRegistro);
   q("#lnkVolver")?.addEventListener("click",e=>{e.preventDefault();state.view="login";render();});
-
-  // ADMIN
+  q("#btnExport")?.addEventListener("click",exportCSV);
   q("#btnBorrarTodo")?.addEventListener("click",()=>{
     if(confirm("⚠️ ¿Seguro que quieres borrar TODOS los registros? Esta acción no se puede deshacer.")) doBorrarTodo();
   });
-  document.querySelectorAll("[data-eliminar]").forEach(el=>el.addEventListener("click",e=>{
-    e.stopPropagation();
-    if(confirm(`¿Eliminar este registro?`)) doEliminar(el.dataset.eliminar);
-  }));
   q("#btnSalirAdmin")?.addEventListener("click",salir);
   q("#btnEnviarLink")?.addEventListener("click",()=>{
     const msg=`Hola! 🌴 Ya confirmamos tu pago para la Fiesta Tropical de Buseta.\n\nPara quedar inscrito en la lista, abre este link y completa tus datos:\n\nhttps://fiesta-tropical-buseta.vercel.app\n\n¡Nos vemos en la fiesta! 🎉`;
@@ -468,30 +403,35 @@ function bindEvents(){
   q("#btnEditarPrecio")?.addEventListener("click",()=>{state.editandoPrecio=true;render();});
   q("#btnGuardarPrecio")?.addEventListener("click",()=>{
     const v=parseInt(q("#inputPrecio").value)||35000;
-    state.precio=v; state.editandoPrecio=false;
-    localStorage.setItem(PRECIO_KEY,v); render();
+    state.precio=v;state.editandoPrecio=false;localStorage.setItem(PRECIO_KEY,v);render();
   });
   q("#searchInput")?.addEventListener("input",e=>{state.search=e.target.value;render();});
   document.querySelectorAll("[data-tab]").forEach(el=>el.addEventListener("click",()=>{state.tab=el.dataset.tab;render();}));
   document.querySelectorAll("[data-aprobar]").forEach(el=>el.addEventListener("click",()=>doAprobar(el.dataset.aprobar)));
   document.querySelectorAll("[data-pago]").forEach(el=>el.addEventListener("click",()=>togglePago(el.dataset.pago)));
   document.querySelectorAll("[data-wa]").forEach(el=>el.addEventListener("click",()=>enviarWA(el.dataset.wa)));
+  document.querySelectorAll("[data-eliminar]").forEach(el=>el.addEventListener("click",e=>{
+    e.stopPropagation();
+    if(confirm(`¿Eliminar el registro de ${state.attendees.find(a=>a.code===el.dataset.eliminar)?.nombre||"esta persona"}?`)) doEliminar(el.dataset.eliminar);
+  }));
   document.querySelectorAll("[data-toggle]").forEach(el=>el.addEventListener("click",()=>{
-    state.selectedTicket=state.selectedTicket===el.dataset.toggle?null:el.dataset.toggle;
-    render();
+    state.selectedTicket=state.selectedTicket===el.dataset.toggle?null:el.dataset.toggle;render();
   }));
   document.querySelectorAll(".promo-input").forEach(el=>el.addEventListener("input",e=>{
     state.editPromos[e.target.dataset.code]=parseInt(e.target.value)||1;
     const span=q(`#entries_${e.target.dataset.code}`);
     if(span) span.textContent=`${(parseInt(e.target.value)||1)*2} entradas`;
   }));
-
-  // PUERTA
   q("#btnSalirPuerta")?.addEventListener("click",salir);
   q("#btnValidar")?.addEventListener("click",()=>doValidar(q("#codeInput").value));
   q("#codeInput")?.addEventListener("keydown",e=>{if(e.key==="Enter")doValidar(e.target.value);});
   q("#codeInput")?.addEventListener("input",e=>{state.manualCode=e.target.value.toUpperCase();});
   q("#searchPuerta")?.addEventListener("input",e=>{state.search=e.target.value;render();});
+  q("#btnOtraEntrada")?.addEventListener("click",()=>{
+    const code=state.scanMsg?.code;
+    state.scanMsg=null;
+    if(code) doValidar(code);
+  });
   document.querySelectorAll("[data-entrada]").forEach(el=>el.addEventListener("click",e=>{
     e.stopPropagation();
     doValidar(el.dataset.entrada);
@@ -500,32 +440,24 @@ function bindEvents(){
 
 function q(sel){return document.querySelector(sel);}
 
-// ─── ACCIONES ────────────────────────────────────────────────────────────────
 function doLogin(role){
   const pass=q("#pass")?.value||"";
   const ok=role==="admin"?pass===PASS_ADMIN:pass===PASS_PUERTA;
   if(!ok){state.passErr="Contraseña incorrecta";render();return;}
-  state.passErr="";
-  state.view=role;
-  state.search="";
-  render();
-  loadAndPoll();
+  state.passErr="";state.view=role;state.search="";render();loadAndPoll();
 }
 
 function salir(){
   clearInterval(state.pollInterval);
-  state.view="login"; state.attendees=[]; state.scanMsg=null; state.search="";
-  render();
+  state.view="login";state.attendees=[];state.scanMsg=null;state.search="";render();
 }
 
 async function loadAndPoll(){
-  state.loading=true; render();
-  try{ state.attendees=await getData(); }catch{}
-  state.loading=false; render();
+  state.loading=true;render();
+  try{state.attendees=await getData();}catch{}
+  state.loading=false;render();
   clearInterval(state.pollInterval);
-  state.pollInterval=setInterval(async()=>{
-    try{ state.attendees=await getData(); render(); }catch{}
-  },6000);
+  state.pollInterval=setInterval(async()=>{try{state.attendees=await getData();render();}catch{}},6000);
 }
 
 async function doRegistro(){
@@ -533,8 +465,8 @@ async function doRegistro(){
   const cedula=q("#reg_cedula").value.trim();
   const telefono=q("#reg_telefono").value.trim();
   const correo=q("#reg_correo").value.trim();
-  if(!nombre||!cedula||!telefono||!correo){state.view="registro";document.getElementById("root").innerHTML=renderRegistro("Por favor completa todos los campos");bindEvents();return;}
-  q("#btnEnviarReg").disabled=true; q("#btnEnviarReg").textContent="Enviando...";
+  if(!nombre||!cedula||!telefono||!correo){document.getElementById("root").innerHTML=renderRegistro("Por favor completa todos los campos");bindEvents();return;}
+  q("#btnEnviarReg").disabled=true;q("#btnEnviarReg").textContent="Enviando...";
   try{
     const data=await getData();
     if(data.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro("Ya existe un registro con esa cédula");bindEvents();return;}
@@ -545,35 +477,35 @@ async function doRegistro(){
 }
 
 async function doBorrarTodo(){
-  state.saving=true; render();
+  state.saving=true;render();
   await setData([]);
-  state.attendees=[]; state.saving=false; render();
+  state.attendees=[];state.saving=false;render();
 }
 
 async function doEliminar(code){
   const updated=state.attendees.filter(a=>a.code!==code);
-  state.saving=true; render();
+  state.saving=true;render();
   await setData(updated);
-  state.attendees=updated; state.saving=false; render();
+  state.attendees=updated;state.saving=false;render();
 }
 
 async function doAprobar(code){
   const promos=state.editPromos[code]||1;
   const updated=state.attendees.map(a=>a.code===code?{...a,promos,totalEntries:promos*2,pagado:true,pendienteAprobacion:false}:a);
-  state.saving=true; render();
+  state.saving=true;render();
   await setData(updated);
-  state.attendees=updated; state.saving=false; render();
+  state.attendees=updated;state.saving=false;render();
 }
 
 async function togglePago(code){
   const updated=state.attendees.map(a=>a.code===code?{...a,pagado:!a.pagado}:a);
-  state.saving=true; render();
+  state.saving=true;render();
   await setData(updated);
-  state.attendees=updated; state.saving=false; render();
+  state.attendees=updated;state.saving=false;render();
 }
 
 function enviarWA(code){
-  const p=state.attendees.find(a=>a.code===code); if(!p) return;
+  const p=state.attendees.find(a=>a.code===code);if(!p)return;
   const msg=`Hola ${p.nombre} 🌴\n\nTu entrada para la Fiesta Tropical de Buseta está confirmada.\n\n🎟️ Código: ${p.code}\n👥 Entradas: ${p.totalEntries}\n\nGuarda este código, lo necesitarás en la puerta.\n\n¡Nos vemos en la fiesta! 🎉`;
   const tel=p.telefono.replace(/\D/g,"");
   window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`,"_blank");
@@ -581,7 +513,7 @@ function enviarWA(code){
 
 async function doValidar(code){
   const c=code.trim().toUpperCase();
-  if(!c) return;
+  if(!c)return;
   try{
     const fresh=await getData();
     state.attendees=fresh;
@@ -594,14 +526,12 @@ async function doValidar(code){
     const updated=fresh.map((a,i)=>i===idx?{...a,usedEntries:(a.usedEntries||0)+1}:a);
     state.saving=true;
     await setData(updated);
-    state.attendees=updated; state.saving=false;
+    state.attendees=updated;state.saving=false;
     state.scanMsg={type:"ok",text:p.nombre,entrada:p.totalEntries-(left-1),total:p.totalEntries,left:left-1,code:c};
-    state.manualCode="";
-    render();
+    state.manualCode="";render();
   }catch(e){state.scanMsg={type:"error",text:"Error de conexión"};render();}
 }
 
-// ─── INIT ────────────────────────────────────────────────────────────────────
 render();
 </script>
 </body>
