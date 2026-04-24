@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fiesta Tropical de Buseta — Registro</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #fff; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+    .card { background: linear-gradient(135deg, #1a1a2e, #16213e); border-radius: 20px; padding: 2rem; width: 100%; max-width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .logo { text-align: center; margin-bottom: 1.5rem; }
+    .logo .emoji { font-size: 3rem; }
+    .logo h1 { font-size: 1.3rem; color: #ffb400; margin-top: 0.5rem; letter-spacing: 1px; text-transform: uppercase; }
+    .logo p { font-size: 0.85rem; color: #aaa; margin-top: 0.3rem; }
+    input { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid #333; background: #0f0f1a; color: #fff; font-size: 14px; margin-bottom: 10px; outline: none; transition: border 0.2s; }
+    input:focus { border-color: #ffb400; }
+    input::placeholder { color: #666; }
+    button { width: 100%; padding: 13px 0; background: #F5E727; color: #1a1a1a; font-weight: 700; font-size: 15px; border: 2px solid #C9BE1C; border-radius: 8px; cursor: pointer; transition: background 0.25s, color 0.25s; margin-top: 6px; }
+    button:hover { background: #C93C1C; border-color: #a33015; color: #fff; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error { color: #ff6b6b; font-size: 12px; margin-bottom: 10px; }
+    .success { text-align: center; }
+    .success .big { font-size: 4rem; margin-bottom: 1rem; }
+    .success h2 { font-size: 1.4rem; color: #1dd1a1; margin-bottom: 0.5rem; }
+    .success p { font-size: 0.9rem; color: #aaa; line-height: 1.6; }
+    .note { font-size: 11px; color: #666; text-align: center; margin-top: 1rem; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div id="app"></div>
+  </div>
+
+  <script>
+    const JSONBIN_KEY = "$2a$10$/QHNoYB2rr3sGHNL7Y6uFOIkKASbLa2mWI3CXBXVeIiy0X/HPTs.K";
+    const BIN_ID_KEY = "ftb_bin_id";
+
+    function genCode() {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let c = "BUS-";
+      for (let i = 0; i < 8; i++) c += chars[Math.floor(Math.random() * chars.length)];
+      return c;
+    }
+
+    async function getBinId() {
+      return localStorage.getItem(BIN_ID_KEY);
+    }
+
+    async function getData() {
+      const binId = await getBinId();
+      if (!binId) return [];
+      const res = await fetch(`https://api.jsonbin.io/v3/b/${binId}/latest`, {
+        headers: { "X-Master-Key": JSONBIN_KEY }
+      });
+      const json = await res.json();
+      return json.record?.attendees || [];
+    }
+
+    async function saveData(attendees) {
+      const binId = await getBinId();
+      if (!binId) {
+        // Crear bin nuevo
+        const res = await fetch("https://api.jsonbin.io/v3/b", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_KEY, "X-Bin-Name": "fiesta-tropical-buseta" },
+          body: JSON.stringify({ attendees })
+        });
+        const json = await res.json();
+        localStorage.setItem(BIN_ID_KEY, json.metadata.id);
+        return;
+      }
+      await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Master-Key": JSONBIN_KEY },
+        body: JSON.stringify({ attendees })
+      });
+    }
+
+    function renderForm(err) {
+      document.getElementById("app").innerHTML = `
+        <div class="logo">
+          <div class="emoji">🌴</div>
+          <h1>Fiesta Tropical de Buseta</h1>
+          <p>Completa tus datos para quedar inscrito</p>
+        </div>
+        ${err ? `<div class="error">${err}</div>` : ""}
+        <input id="nombre" placeholder="Nombre completo" />
+        <input id="cedula" placeholder="Cédula de ciudadanía" />
+        <input id="telefono" placeholder="Celular (ej: 3001234567)" />
+        <input id="correo" placeholder="Correo electrónico" type="email" />
+        <button id="btnEnviar">Registrarme →</button>
+        <p class="note">Una vez confirmado tu pago, recibirás tu ticket por WhatsApp 🎉</p>
+      `;
+      document.getElementById("btnEnviar").onclick = handleSubmit;
+    }
+
+    function renderSuccess(nombre) {
+      document.getElementById("app").innerHTML = `
+        <div class="success">
+          <div class="big">🎉</div>
+          <h2>¡Registro exitoso!</h2>
+          <p>Hola <strong>${nombre}</strong>, tus datos quedaron registrados.<br><br>En breve confirmaremos tu pago y recibirás tu ticket con el código de entrada por WhatsApp.</p>
+          <p style="margin-top:1.5rem;font-size:0.85rem;color:#ffb400;">¡Nos vemos en la fiesta! 🌴</p>
+        </div>
+      `;
+    }
+
+    async function handleSubmit() {
+      const nombre = document.getElementById("nombre").value.trim();
+      const cedula = document.getElementById("cedula").value.trim();
+      const telefono = document.getElementById("telefono").value.trim();
+      const correo = document.getElementById("correo").value.trim();
+
+      if (!nombre || !cedula || !telefono || !correo) {
+        renderForm("Por favor completa todos los campos");
+        return;
+      }
+
+      const btn = document.getElementById("btnEnviar");
+      btn.disabled = true;
+      btn.textContent = "Enviando...";
+
+      try {
+        const data = await getData();
+        if (data.find(a => a.cedula === cedula)) {
+          renderForm("Ya existe un registro con esa cédula");
+          return;
+        }
+        const person = {
+          nombre, cedula, telefono, correo,
+          code: genCode(),
+          totalEntries: 0,
+          usedEntries: 0,
+          promos: 0,
+          pagado: false,
+          pendienteAprobacion: true,
+          fecha: new Date().toLocaleDateString("es-CO")
+        };
+        await saveData([...data, person]);
+        renderSuccess(nombre);
+      } catch(e) {
+        renderForm("Error al guardar, intenta de nuevo: " + e.message);
+      }
+    }
+
+    renderForm();
+  </script>
+</body>
+</html>
