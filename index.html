@@ -483,8 +483,6 @@ function bindEvents(){
   q("#codeInput")?.addEventListener("keydown",e=>{if(e.key==="Enter")doValidar(e.target.value);});
   q("#codeInput")?.addEventListener("input",e=>{state.manualCode=e.target.value.toUpperCase();});
   q("#searchPuerta")?.addEventListener("input",e=>{state.search=e.target.value;render();});
-  q("#btnOtraEntrada")?.addEventListener("click",()=>{if(state.scanMsg?.code){state.scanMsg=null;doValidar(state.scanMsg?.code||"");}});
-  // fix: otra entrada
   q("#btnOtraEntrada")?.addEventListener("click",()=>{
     const code=state.scanMsg?.code;
     state.scanMsg=null;
