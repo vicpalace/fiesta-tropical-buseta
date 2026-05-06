@@ -57,37 +57,26 @@ const BIN_ID="69ebd16436566621a8eadb62";
 const PASS_ADMIN="TropicalDiomedes#";
 const PASS_PUERTA="Luismi1993%";
 const PRECIO_KEY="ftb_precio";
-const ACCESS_KEY="ftb_access_codes";
 
 let state={
-  view:"login",attendees:[],saving:false,loading:false,
+  view:"login",attendees:[],accessCodes:[],saving:false,loading:false,
   tab:"lista",search:"",scanMsg:null,manualCode:"",
   selectedTicket:null,precio:parseInt(localStorage.getItem(PRECIO_KEY)||"35000"),
   editandoPrecio:false,editPromos:{},pollInterval:null,passErr:"",
-  accessCodeUsing:null,
-  accessCodes:[]
+  accessCodeUsing:null
 };
 
 function genCode(){
   const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s="FTB";
-  for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)];
+  let s="FTB";for(let i=0;i<6;i++) s+=c[Math.floor(Math.random()*c.length)];
   return s;
 }
 
 function genAccessCode(){
   const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let s="FTB";
-  for(let i=0;i<5;i++) s+=c[Math.floor(Math.random()*c.length)];
+  let s="FTB";for(let i=0;i<5;i++) s+=c[Math.floor(Math.random()*c.length)];
   return s;
 }
-
-function getAccessCodes(){
-  try{return JSON.parse(localStorage.getItem(ACCESS_KEY)||"[]");}catch{return[];}
-}
-function saveAccessCodes(codes){localStorage.setItem(ACCESS_KEY,JSON.stringify(codes));}
-function validateAccessCode(code){return getAccessCodes().includes(code.toUpperCase());}
-function consumeAccessCode(code){saveAccessCodes(getAccessCodes().filter(c=>c!==code.toUpperCase()));}
 
 async function getData(){
   const r=await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{headers:{"X-Master-Key":JSONBIN_KEY}});
@@ -100,29 +89,6 @@ async function setData(data){
     method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":JSONBIN_KEY},
     body:JSON.stringify(data)
   });
-}
-
-async function getAttendees(){const d=await getData();return d.attendees||[];}
-async function getAccessCodesRemote(){const d=await getData();return d.accessCodes||[];}
-
-async function saveAttendees(attendees){
-  const d=await getData();
-  await setData({...d,attendees});
-}
-
-async function saveAccessCodesRemote(accessCodes){
-  const d=await getData();
-  await setData({...d,accessCodes});
-}
-
-async function validateAccessCodeRemote(code){
-  const codes=await getAccessCodesRemote();
-  return codes.includes(code.toUpperCase());
-}
-
-async function consumeAccessCodeRemote(code){
-  const codes=await getAccessCodesRemote();
-  await saveAccessCodesRemote(codes.filter(c=>c!==code.toUpperCase()));
 }
 
 function exportCSV(){
@@ -183,6 +149,11 @@ function renderLogin(){
     </div>
     <input id="pass" type="password" placeholder="Contraseña" />
     ${state.passErr?`<div class="error">${state.passErr}</div>`:""}
+    <div class="grid2" style="margin-bottom:10px">
+      <button class="btn full" id="btnAdmin">Admin</button>
+      <button class="btn full" id="btnPuerta">Puerta</button>
+    </div>
+    <button class="btn full" id="btnRegistro" style="font-size:13px">🎟️ Registrar mis Boletas</button>
   </div></div>`;
 }
 
@@ -230,7 +201,7 @@ function renderRegistroOk(nombre){
 }
 
 function renderAdmin(){
-  const {attendees,saving,loading,tab,search,precio,editandoPrecio}=state;
+  const {attendees,saving,loading,tab,search,precio,editandoPrecio,accessCodes}=state;
   const pagados=attendees.filter(a=>a.pagado);
   const pendientes=attendees.filter(a=>a.pendienteAprobacion);
   const stats={total:attendees.length,pagados:pagados.length,pendientes:pendientes.length,usadas:attendees.reduce((s,a)=>s+(a.usedEntries||0),0)};
@@ -240,7 +211,6 @@ function renderAdmin(){
   const totalAsistentes=pagados.reduce((s,a)=>s+(a.totalEntries||0),0);
   const desglose={};
   pagados.forEach(a=>{const p=a.promos||0;desglose[p]=(desglose[p]||0)+1;});
-  const accessCodes=state.accessCodes||[];
 
   return `<div class="max700" style="padding:1rem">
     <div class="row" style="margin-bottom:16px">
@@ -264,8 +234,8 @@ function renderAdmin(){
         <div style="font-size:13px;font-weight:600">🔑 Códigos de acceso al formulario</div>
         <button class="btn sm" id="btnGenAcceso">+ Generar código</button>
       </div>
-      ${accessCodes.length===0?`<div style="font-size:12px;color:#555">No hay códigos generados — genera uno y envíalo al comprador</div>`:""}
-      ${accessCodes.map(c=>`
+      ${(accessCodes||[]).length===0?`<div style="font-size:12px;color:#555">No hay códigos generados — genera uno y envíalo al comprador</div>`:""}
+      ${(accessCodes||[]).map(c=>`
         <div class="row" style="padding:8px 0;border-bottom:1px solid #222">
           <div style="font-family:monospace;font-size:15px;color:#ffb400;font-weight:700;letter-spacing:2px">${c}</div>
           <div style="display:flex;gap:8px">
@@ -460,10 +430,19 @@ function bindEvents(){
     const code=(q("#reg_acceso")?.value||"").trim().toUpperCase();
     const btn=q("#btnValidarAcceso");
     if(btn){btn.disabled=true;btn.textContent="Validando...";}
-    const valid=await validateAccessCodeRemote(code);
-    if(!valid){document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado");bindEvents();return;}
-    state.accessCodeUsing=code;
-    state.view="registro2";render();
+    try{
+      const d=await getData();
+      const codes=d.accessCodes||[];
+      if(!codes.includes(code)){
+        document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado");
+        bindEvents();return;
+      }
+      state.accessCodeUsing=code;
+      state.view="registro2";render();
+    }catch{
+      document.getElementById("root").innerHTML=renderRegistro("Error de conexión, intenta de nuevo");
+      bindEvents();
+    }
   });
   q("#reg_acceso")?.addEventListener("keydown",e=>{if(e.key==="Enter")q("#btnValidarAcceso")?.click();});
   q("#lnkVolver")?.addEventListener("click",e=>{e.preventDefault();state.view="login";render();});
@@ -484,10 +463,10 @@ function bindEvents(){
   });
   q("#btnGenAcceso")?.addEventListener("click",async()=>{
     const code=genAccessCode();
-    const codes=await getAccessCodesRemote();
-    await saveAccessCodesRemote([...codes,code]);
-    state.accessCodes=[...codes,code];
-    render();
+    const d=await getData();
+    const codes=[...(d.accessCodes||[]),code];
+    await setData({...d,accessCodes:codes});
+    state.accessCodes=codes;render();
   });
   document.querySelectorAll("[data-copiar]").forEach(el=>el.addEventListener("click",()=>{
     navigator.clipboard.writeText(el.dataset.copiar);
@@ -495,10 +474,10 @@ function bindEvents(){
     setTimeout(()=>{el.textContent="Copiar";},2000);
   }));
   document.querySelectorAll("[data-borrar-acceso]").forEach(el=>el.addEventListener("click",async()=>{
-    const updated=(await getAccessCodesRemote()).filter(c=>c!==el.dataset.borrarAcceso);
-    await saveAccessCodesRemote(updated);
-    state.accessCodes=updated;
-    render();
+    const d=await getData();
+    const codes=(d.accessCodes||[]).filter(c=>c!==el.dataset.borrarAcceso);
+    await setData({...d,accessCodes:codes});
+    state.accessCodes=codes;render();
   }));
   q("#searchInput")?.addEventListener("input",e=>{state.search=e.target.value;render();});
   document.querySelectorAll("[data-tab]").forEach(el=>el.addEventListener("click",()=>{state.tab=el.dataset.tab;render();}));
@@ -523,13 +502,11 @@ function bindEvents(){
   q("#codeInput")?.addEventListener("input",e=>{state.manualCode=e.target.value.toUpperCase();});
   q("#searchPuerta")?.addEventListener("input",e=>{state.search=e.target.value;render();});
   q("#btnOtraEntrada")?.addEventListener("click",()=>{
-    const code=state.scanMsg?.code;
-    state.scanMsg=null;
+    const code=state.scanMsg?.code;state.scanMsg=null;
     if(code) doValidar(code);
   });
   document.querySelectorAll("[data-entrada]").forEach(el=>el.addEventListener("click",e=>{
-    e.stopPropagation();
-    doValidar(el.dataset.entrada);
+    e.stopPropagation();doValidar(el.dataset.entrada);
   }));
 }
 
@@ -574,11 +551,11 @@ async function doRegistro(){
   if(!nombre||!cedula||!telefono||!correo){document.getElementById("root").innerHTML=renderRegistro2("Por favor completa todos los campos");bindEvents();return;}
   q("#btnEnviarReg").disabled=true;q("#btnEnviarReg").textContent="Enviando...";
   try{
-    const data=await getData();
-    if(data.attendees?.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro2("Ya existe un registro con esa cédula");bindEvents();return;}
+    const d=await getData();
+    if((d.attendees||[]).find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro2("Ya existe un registro con esa cédula");bindEvents();return;}
     const person={nombre,cedula,telefono,correo,code:genCode(),totalEntries:0,usedEntries:0,promos:0,pagado:false,pendienteAprobacion:true,fecha:new Date().toLocaleDateString("es-CO")};
-    await setData({...data,attendees:[...(data.attendees||[]),person]});
-    if(state.accessCodeUsing) await consumeAccessCodeRemote(state.accessCodeUsing);
+    const codes=(d.accessCodes||[]).filter(c=>c!==state.accessCodeUsing);
+    await setData({...d,attendees:[...(d.attendees||[]),person],accessCodes:codes});
     state.accessCodeUsing=null;
     renderRegistroOk(nombre);
   }catch(e){document.getElementById("root").innerHTML=renderRegistro2("Error al guardar: "+e.message);bindEvents();}
@@ -586,14 +563,16 @@ async function doRegistro(){
 
 async function doBorrarTodo(){
   state.saving=true;render();
-  await setData([]);
+  const d=await getData();
+  await setData({...d,attendees:[]});
   state.attendees=[];state.saving=false;render();
 }
 
 async function doEliminar(code){
   const updated=state.attendees.filter(a=>a.code!==code);
   state.saving=true;render();
-  await setData(updated);
+  const d=await getData();
+  await setData({...d,attendees:updated});
   state.attendees=updated;state.saving=false;render();
 }
 
@@ -601,14 +580,16 @@ async function doAprobar(code){
   const promos=state.editPromos[code]||1;
   const updated=state.attendees.map(a=>a.code===code?{...a,promos,totalEntries:promos*2,pagado:true,pendienteAprobacion:false}:a);
   state.saving=true;render();
-  await setData(updated);
+  const d=await getData();
+  await setData({...d,attendees:updated});
   state.attendees=updated;state.saving=false;render();
 }
 
 async function togglePago(code){
   const updated=state.attendees.map(a=>a.code===code?{...a,pagado:!a.pagado}:a);
   state.saving=true;render();
-  await setData(updated);
+  const d=await getData();
+  await setData({...d,attendees:updated});
   state.attendees=updated;state.saving=false;render();
 }
 
@@ -623,7 +604,8 @@ async function doValidar(code){
   const c=code.trim().toUpperCase();
   if(!c)return;
   try{
-    const fresh=await getData();
+    const d=await getData();
+    const fresh=d.attendees||[];
     state.attendees=fresh;
     const idx=fresh.findIndex(a=>a.code===c);
     if(idx===-1){state.scanMsg={type:"error",text:"Código no encontrado"};render();return;}
@@ -633,7 +615,7 @@ async function doValidar(code){
     if(left<=0){state.scanMsg={type:"blocked",text:`Ticket agotado — ${p.nombre} ya usó todas sus entradas`};render();return;}
     const updated=fresh.map((a,i)=>i===idx?{...a,usedEntries:(a.usedEntries||0)+1}:a);
     state.saving=true;
-    await setData(updated);
+    await setData({...d,attendees:updated});
     state.attendees=updated;state.saving=false;
     state.scanMsg={type:"ok",text:p.nombre,entrada:p.totalEntries-(left-1),total:p.totalEntries,left:left-1,code:c};
     state.manualCode="";render();
