@@ -72,6 +72,13 @@ function genCode(){
   return s;
 }
 
+function genAccessCode(){
+  const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let s="FTB";
+  for(let i=0;i<5;i++) s+=c[Math.floor(Math.random()*c.length)];
+  return s;
+}
+
 async function getData(){
   const r=await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{headers:{"X-Master-Key":JSONBIN_KEY}});
   const j=await r.json();
@@ -95,7 +102,22 @@ function exportCSV(){
   URL.revokeObjectURL(u);
 }
 
-function renderQR(el,code,size=90){
+const ACCESS_KEY="ftb_access_codes";
+
+function getAccessCodes(){
+  try{return JSON.parse(localStorage.getItem(ACCESS_KEY)||"[]");}catch{return[];}
+}
+function saveAccessCodes(codes){
+  localStorage.setItem(ACCESS_KEY,JSON.stringify(codes));
+}
+function validateAccessCode(code){
+  const codes=getAccessCodes();
+  return codes.includes(code.toUpperCase());
+}
+function consumeAccessCode(code){
+  const codes=getAccessCodes().filter(c=>c!==code.toUpperCase());
+  saveAccessCodes(codes);
+}
   el.innerHTML="";
   new QRCode(el,{text:code,width:size,height:size,colorDark:"#1a1a2e",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
 }
@@ -146,12 +168,25 @@ function renderLogin(){
       <button class="btn full" id="btnAdmin">Admin</button>
       <button class="btn full" id="btnPuerta">Puerta</button>
     </div>
-    <button class="btn full" id="btnRegistro" style="font-size:13px">🎟️ Registrarme como asistente</button>
+    <button class="btn full" id="btnRegistro" style="font-size:13px">🎟️ Registrar mis Boletas</button>
     <div style="margin-top:12px;font-size:11px;color:#555;text-align:center">Admin: ${PASS_ADMIN} · Puerta: ${PASS_PUERTA}</div>
   </div></div>`;
 }
 
-function renderRegistro(err){
+function renderRegistro(err, step=1){
+  if(step===1) return `<div class="center"><div class="card">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:3rem">🌴</div>
+      <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
+      <div style="font-size:13px;color:#aaa;margin-top:4px">Ingresa tu código de acceso</div>
+    </div>
+    ${err?`<div class="error">${err}</div>`:""}
+    <input id="reg_acceso" placeholder="Código de acceso (ej: FTBAB3K9)" style="text-transform:uppercase;letter-spacing:2px;font-family:monospace;font-size:16px;text-align:center"/>
+    <button class="btn full" id="btnValidarAcceso" style="margin-top:6px">Validar código →</button>
+    <div style="font-size:11px;color:#555;text-align:center;margin-top:14px;line-height:1.5">El código te lo enviamos por WhatsApp al confirmar tu pago 🎉</div>
+    <div style="text-align:center;margin-top:12px"><a href="#" id="lnkVolver">← Volver</a></div>
+  </div></div>`;
+
   return `<div class="center"><div class="card">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:3rem">🌴</div>
@@ -165,7 +200,6 @@ function renderRegistro(err){
     <input id="reg_correo" placeholder="Correo electrónico" type="email" />
     <button class="btn full" id="btnEnviarReg" style="margin-top:6px">Registrarme →</button>
     <div style="font-size:11px;color:#555;text-align:center;margin-top:14px;line-height:1.5">Una vez confirmado tu pago, recibirás tu ticket por WhatsApp 🎉</div>
-    <div style="text-align:center;margin-top:12px"><a href="#" id="lnkVolver">← Volver</a></div>
   </div></div>`;
 }
 
@@ -209,12 +243,26 @@ function renderAdmin(){
       <div class="stat"><div class="lbl">Ya ingresaron</div><div class="val">${stats.usadas}</div></div>
     </div>
 
-    <div class="panel row" style="margin-bottom:16px">
-      <div>
-        <div style="font-size:13px;font-weight:600">📋 Formulario de registro</div>
-        <div style="font-size:12px;color:#aaa;margin-top:2px">Envíale este link al comprador para que llene sus datos</div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="row" style="margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600">🔑 Códigos de acceso al formulario</div>
+        <button class="btn sm" id="btnGenAcceso">+ Generar código</button>
       </div>
-      <button class="btn sm" id="btnEnviarLink">📲 Enviar link</button>
+      <div id="accessCodesList">
+        ${(()=>{
+          const codes=getAccessCodes();
+          if(codes.length===0) return `<div style="font-size:12px;color:#555">No hay códigos generados</div>`;
+          return codes.map(c=>`
+            <div class="row" style="padding:6px 0;border-bottom:1px solid #222">
+              <div style="font-family:monospace;font-size:14px;color:#ffb400;font-weight:700">${c}</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn sm" data-copiar="${c}">Copiar</button>
+                <button class="btn sm red" data-borrar-acceso="${c}">🗑</button>
+              </div>
+            </div>
+          `).join("");
+        })()}
+      </div>
     </div>
 
     <div class="tabs">
@@ -387,9 +435,31 @@ function renderPuerta(){
 function bindEvents(){
   q("#btnAdmin")?.addEventListener("click",()=>doLogin("admin"));
   q("#btnPuerta")?.addEventListener("click",()=>doLogin("puerta"));
-  q("#btnRegistro")?.addEventListener("click",()=>{state.view="registro";render();});
-  q("#pass")?.addEventListener("keydown",e=>{if(e.key==="Enter")doLogin("admin");});
-  q("#btnEnviarReg")?.addEventListener("click",doRegistro);
+  q("#btnGenAcceso")?.addEventListener("click",()=>{
+    const code=genAccessCode();
+    const codes=getAccessCodes();
+    codes.push(code);
+    saveAccessCodes(codes);
+    render();
+  });
+  document.querySelectorAll("[data-copiar]").forEach(el=>el.addEventListener("click",()=>{
+    navigator.clipboard.writeText(el.dataset.copiar);
+    el.textContent="✓ Copiado";
+    setTimeout(()=>{el.textContent="Copiar";},2000);
+  }));
+  document.querySelectorAll("[data-borrar-acceso]").forEach(el=>el.addEventListener("click",()=>{
+    const codes=getAccessCodes().filter(c=>c!==el.dataset.borrarAcceso);
+    saveAccessCodes(codes);
+    render();
+  }));
+  q("#btnValidarAcceso")?.addEventListener("click",()=>{
+    const code=(q("#reg_acceso")?.value||"").trim().toUpperCase();
+    if(!validateAccessCode(code)){document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado",1);bindEvents();return;}
+    state.accessCodeUsing=code;
+    document.getElementById("root").innerHTML=renderRegistro("",2);
+    bindEvents();
+  });
+  q("#reg_acceso")?.addEventListener("keydown",e=>{if(e.key==="Enter"){q("#btnValidarAcceso")?.click();}});
   q("#lnkVolver")?.addEventListener("click",e=>{e.preventDefault();state.view="login";render();});
   q("#btnExport")?.addEventListener("click",exportCSV);
   q("#btnBorrarTodo")?.addEventListener("click",()=>{
@@ -472,6 +542,8 @@ async function doRegistro(){
     if(data.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro("Ya existe un registro con esa cédula");bindEvents();return;}
     const person={nombre,cedula,telefono,correo,code:genCode(),totalEntries:0,usedEntries:0,promos:0,pagado:false,pendienteAprobacion:true,fecha:new Date().toLocaleDateString("es-CO")};
     await setData([...data,person]);
+    if(state.accessCodeUsing) consumeAccessCode(state.accessCodeUsing);
+    state.accessCodeUsing=null;
     renderRegistroOk(nombre);
   }catch(e){document.getElementById("root").innerHTML=renderRegistro("Error al guardar: "+e.message);bindEvents();}
 }
