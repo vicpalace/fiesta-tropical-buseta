@@ -278,10 +278,10 @@ function renderAdmin(){
               <button class="btn sm red" data-eliminar="${p.code}">🗑 Eliminar</button>
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <label style="font-size:13px;color:#aaa;white-space:nowrap">Promos 2x1:</label>
-            <input type="number" min="1" max="10" value="${state.editPromos[p.code]||1}" data-code="${p.code}" class="promo-input" style="width:60px;margin-bottom:0"/>
-            <span style="font-size:12px;color:#aaa" id="entries_${p.code}">${(state.editPromos[p.code]||1)*2} entradas</span>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:13px;color:#aaa;white-space:nowrap">Entradas:</label>
+            <input type="number" min="2" max="20" step="2" value="${(state.editPromos[p.code]||1)*2}" data-code="${p.code}" class="promo-input" style="width:60px;margin-bottom:0"/>
+            <span style="font-size:12px;color:#aaa" id="entries_${p.code}">${(state.editPromos[p.code]||1)} promo(s) · ${((state.editPromos[p.code]||1)*precio).toLocaleString("es-CO")}</span>
             <button class="btn sm" style="margin-left:auto" data-aprobar="${p.code}">✓ Aprobar</button>
           </div>
         </div>
@@ -492,9 +492,11 @@ function bindEvents(){
     state.selectedTicket=state.selectedTicket===el.dataset.toggle?null:el.dataset.toggle;render();
   }));
   document.querySelectorAll(".promo-input").forEach(el=>el.addEventListener("input",e=>{
-    state.editPromos[e.target.dataset.code]=parseInt(e.target.value)||1;
+    const entradas=Math.max(2,parseInt(e.target.value)||2);
+    const promos=Math.ceil(entradas/2);
+    state.editPromos[e.target.dataset.code]=promos;
     const span=q(`#entries_${e.target.dataset.code}`);
-    if(span) span.textContent=`${(parseInt(e.target.value)||1)*2} entradas`;
+    if(span) span.textContent=`${promos} promo(s) · ${(promos*state.precio).toLocaleString("es-CO")}`;
   }));
   q("#btnSalirPuerta")?.addEventListener("click",salir);
   q("#btnValidar")?.addEventListener("click",()=>doValidar(q("#codeInput").value));
