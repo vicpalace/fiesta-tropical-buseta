@@ -389,12 +389,9 @@ function renderPuerta(){
             ${scanMsg.type==="ok"?"✅ Ingreso autorizado":scanMsg.type==="blocked"?"⊘ Ticket agotado":"❌ No autorizado"}
           </div>
           <div style="font-size:13px;margin-top:4px;color:${scanMsg.type==="ok"?"#1dd1a1":scanMsg.type==="blocked"?"#ffb400":"#ff6b6b"}">
-            ${scanMsg.type==="ok"?`${scanMsg.text} — entrada ${scanMsg.entrada} de ${scanMsg.total}`:scanMsg.text}
+            ${scanMsg.type==="ok"?`${scanMsg.text}`:scanMsg.text}
           </div>
-          ${scanMsg.type==="ok"?`
-            <div style="font-size:12px;color:#1dd1a1;margin-top:6px">Quedan ${scanMsg.left} entradas disponibles</div>
-            ${scanMsg.left>0?`<button class="btn full" style="margin-top:10px" id="btnOtraEntrada">+ Registrar otra entrada</button>`:""}
-          `:""}
+          ${scanMsg.type==="ok"?renderContador(scanMsg):""}
         </div>
       `:""}
       <input id="searchPuerta" placeholder="Buscar por nombre o cédula..." value="${search}" style="width:100%;margin-bottom:12px"/>
@@ -418,6 +415,34 @@ function renderPuerta(){
         }).join("")}
       </div>
     `}
+  </div>`;
+}
+
+function renderContador(scanMsg){
+  const used=scanMsg.usedLocal||scanMsg.entrada;
+  const total=scanMsg.total;
+  const left=total-used;
+  const blocked=left<=0;
+  return `
+  <div style="margin-top:12px">
+    <div style="font-size:12px;color:#1dd1a1;margin-bottom:8px">Entradas: ${used} de ${total} usadas</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${Array.from({length:total}).map((_,i)=>`
+        <div style="width:28px;height:28px;border-radius:6px;background:${i<used?"#ff6b6b":"#1dd1a1"};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">
+          ${i<used?"X":"✓"}
+        </div>
+      `).join("")}
+    </div>
+    ${!blocked?`
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" id="btnSumarEntrada" style="font-size:20px;padding:6px 20px;flex:1" ${blocked?"disabled":""}>+ Entrada</button>
+      </div>
+    `:`<div style="font-size:13px;color:#ff6b6b;font-weight:600;text-align:center">⊘ Ticket agotado</div>`}
+    ${scanMsg.pendingAdds>0?`
+      <button class="btn full" style="margin-top:10px;font-size:13px" id="btnConfirmarEntradas">
+        ✓ Confirmar ${scanMsg.pendingAdds} entrada${scanMsg.pendingAdds>1?"s":""} (guardar)
+      </button>
+    `:""}
   </div>`;
 }
 
@@ -507,6 +532,31 @@ function bindEvents(){
     const code=state.scanMsg?.code;state.scanMsg=null;
     if(code) doValidar(code);
   });
+  q("#btnSumarEntrada")?.addEventListener("click",()=>{
+    if(!state.scanMsg) return;
+    const msg=state.scanMsg;
+    const used=msg.usedLocal||msg.entrada;
+    if(used>=msg.total) return;
+    state.scanMsg={...msg,usedLocal:used+1,pendingAdds:(msg.pendingAdds||0)+1};
+    render();
+  });
+  q("#btnConfirmarEntradas")?.addEventListener("click",async()=>{
+    if(!state.scanMsg) return;
+    const {code,pendingAdds}=state.scanMsg;
+    if(!pendingAdds||!code) return;
+    state.saving=true;render();
+    try{
+      const d=await getData();
+      const fresh=d.attendees||[];
+      const idx=fresh.findIndex(a=>a.code===code);
+      if(idx!==-1){
+        const updated=fresh.map((a,i)=>i===idx?{...a,usedEntries:(a.usedEntries||0)+pendingAdds}:a);
+        await setData({...d,attendees:updated});
+        state.attendees=updated;
+      }
+    }catch{}
+    state.scanMsg=null;state.saving=false;render();
+  });
   document.querySelectorAll("[data-entrada]").forEach(el=>el.addEventListener("click",e=>{
     e.stopPropagation();doValidar(el.dataset.entrada);
   }));
@@ -580,7 +630,8 @@ async function doEliminar(code){
 
 async function doAprobar(code){
   const promos=state.editPromos[code]||1;
-  const updated=state.attendees.map(a=>a.code===code?{...a,promos,totalEntries:promos*2,pagado:true,pendienteAprobacion:false}:a);
+  const totalEntries=promos*2;
+  const updated=state.attendees.map(a=>a.code===code?{...a,promos,totalEntries,pagado:true,pendienteAprobacion:false}:a);
   state.saving=true;render();
   const d=await getData();
   await setData({...d,attendees:updated});
