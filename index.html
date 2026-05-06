@@ -370,6 +370,8 @@ function renderAdmin(){
   </div>`;
 }
 
+let localCounts={};
+
 function renderPuerta(){
   const {attendees,saving,loading,search,scanMsg}=state;
   const filtered=attendees.filter(a=>(a.nombre||"").toLowerCase().includes(search.toLowerCase())||(a.cedula||"").includes(search)||(a.code||"").toUpperCase().includes(search.toUpperCase()));
@@ -383,66 +385,63 @@ function renderPuerta(){
         <input id="codeInput" placeholder="Código FTB..." value="${state.manualCode}" style="margin-bottom:0;flex:1"/>
         <button class="btn" id="btnValidar">Validar</button>
       </div>
-      ${scanMsg?`
+      ${scanMsg&&scanMsg.type!=="ok"?`
         <div class="msg ${scanMsg.type}" style="margin-bottom:14px">
-          <div style="font-weight:600;font-size:15px;color:${scanMsg.type==="ok"?"#1dd1a1":scanMsg.type==="blocked"?"#ffb400":"#ff6b6b"}">
-            ${scanMsg.type==="ok"?"✅ Ingreso autorizado":scanMsg.type==="blocked"?"⊘ Ticket agotado":"❌ No autorizado"}
+          <div style="font-weight:600;font-size:15px;color:${scanMsg.type==="blocked"?"#ffb400":"#ff6b6b"}">
+            ${scanMsg.type==="blocked"?"⊘ Ticket agotado":"❌ No autorizado"}
           </div>
-          <div style="font-size:13px;margin-top:4px;color:${scanMsg.type==="ok"?"#1dd1a1":scanMsg.type==="blocked"?"#ffb400":"#ff6b6b"}">
-            ${scanMsg.type==="ok"?`${scanMsg.text}`:scanMsg.text}
-          </div>
-          ${scanMsg.type==="ok"?renderContador(scanMsg):""}
+          <div style="font-size:13px;margin-top:4px;color:${scanMsg.type==="blocked"?"#ffb400":"#ff6b6b"}">${scanMsg.text}</div>
         </div>
       `:""}
       <input id="searchPuerta" placeholder="Buscar por nombre o cédula..." value="${search}" style="width:100%;margin-bottom:12px"/>
       <div>
         ${filtered.slice(0,20).map(p=>{
-          const left=(p.totalEntries||0)-(p.usedEntries||0);
+          const used=p.usedEntries||0;
+          const total=p.totalEntries||0;
+          const local=localCounts[p.code]||0;
+          const usedTotal=used+local;
+          const left=total-usedTotal;
+          const blocked=left<=0;
+          const isOpen=state.selectedTicket===p.code;
           return `
-          <div class="panel" style="cursor:pointer" data-toggle="${p.code}">
-            <div class="row">
+          <div class="panel" style="border:0.5px solid ${blocked?"#ff6b6b":local>0?"#ffb400":"#333"}">
+            <div class="row" style="cursor:pointer" data-toggle="${p.code}">
               <div>
                 <div style="font-size:14px;font-weight:600">${p.nombre}</div>
                 <div style="font-size:12px;color:#aaa">CC ${p.cedula} · ${p.code}</div>
               </div>
               <div style="text-align:right">
-                <div style="font-size:12px;color:${left===0?"#ff6b6b":"#1dd1a1"};font-weight:600">${left===0?"Agotado":`${left}/${p.totalEntries}`}</div>
+                <div style="font-size:12px;color:${blocked?"#ff6b6b":"#1dd1a1"};font-weight:600">${blocked?"Agotado":`${usedTotal}/${total}`}</div>
                 <div style="font-size:11px;color:${p.pagado?"#1dd1a1":"#ffb400"}">${p.pagado?"Pagado":"Pendiente"}</div>
+                ${local>0?`<div style="font-size:10px;color:#ffb400">+${local} sin confirmar</div>`:""}
               </div>
             </div>
-            ${state.selectedTicket===p.code?renderTicket(p,true):""}
+            ${isOpen?`
+              <div style="margin-top:12px">
+                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px">
+                  ${Array.from({length:total}).map((_,i)=>`
+                    <div style="width:28px;height:28px;border-radius:6px;background:${i<used?"#ff6b6b":i<usedTotal?"#ffb400":"#1dd1a1"};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">
+                      ${i<used?"X":i<usedTotal?"★":"✓"}
+                    </div>
+                  `).join("")}
+                </div>
+                <div style="font-size:12px;color:#aaa;margin-bottom:10px">
+                  ${used} confirmadas · ${local>0?`<span style="color:#ffb400">${local} pendientes de guardar</span>`:"sin cambios"} · ${left} disponibles
+                </div>
+                ${!blocked?`
+                  <button class="btn full" style="font-size:15px;padding:12px 0;margin-bottom:8px" data-sumar="${p.code}">+ Entrada</button>
+                `:""}
+                ${local>0?`
+                  <button class="btn full" style="font-size:13px;background:#1dd1a1;border-color:#17a98a;color:#000" data-confirmar="${p.code}">
+                    ✓ Confirmar ${local} entrada${local>1?"s":""} y guardar
+                  </button>
+                `:""}
+              </div>
+            `:""}
           </div>`;
         }).join("")}
       </div>
     `}
-  </div>`;
-}
-
-function renderContador(scanMsg){
-  const used=scanMsg.usedLocal||scanMsg.entrada;
-  const total=scanMsg.total;
-  const left=total-used;
-  const blocked=left<=0;
-  return `
-  <div style="margin-top:12px">
-    <div style="font-size:12px;color:#1dd1a1;margin-bottom:8px">Entradas: ${used} de ${total} usadas</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-      ${Array.from({length:total}).map((_,i)=>`
-        <div style="width:28px;height:28px;border-radius:6px;background:${i<used?"#ff6b6b":"#1dd1a1"};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">
-          ${i<used?"X":"✓"}
-        </div>
-      `).join("")}
-    </div>
-    ${!blocked?`
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn" id="btnSumarEntrada" style="font-size:20px;padding:6px 20px;flex:1" ${blocked?"disabled":""}>+ Entrada</button>
-      </div>
-    `:`<div style="font-size:13px;color:#ff6b6b;font-weight:600;text-align:center">⊘ Ticket agotado</div>`}
-    ${scanMsg.pendingAdds>0?`
-      <button class="btn full" style="margin-top:10px;font-size:13px" id="btnConfirmarEntradas">
-        ✓ Confirmar ${scanMsg.pendingAdds} entrada${scanMsg.pendingAdds>1?"s":""} (guardar)
-      </button>
-    `:""}
   </div>`;
 }
 
@@ -528,35 +527,31 @@ function bindEvents(){
   q("#codeInput")?.addEventListener("keydown",e=>{if(e.key==="Enter")doValidar(e.target.value);});
   q("#codeInput")?.addEventListener("input",e=>{state.manualCode=e.target.value.toUpperCase();});
   q("#searchPuerta")?.addEventListener("input",e=>{state.search=e.target.value;render();});
-  q("#btnOtraEntrada")?.addEventListener("click",()=>{
-    const code=state.scanMsg?.code;state.scanMsg=null;
-    if(code) doValidar(code);
-  });
-  q("#btnSumarEntrada")?.addEventListener("click",()=>{
-    if(!state.scanMsg) return;
-    const msg=state.scanMsg;
-    const used=msg.usedLocal||msg.entrada;
-    if(used>=msg.total) return;
-    state.scanMsg={...msg,usedLocal:used+1,pendingAdds:(msg.pendingAdds||0)+1};
+  document.querySelectorAll("[data-sumar]").forEach(el=>el.addEventListener("click",e=>{
+    e.stopPropagation();
+    const code=el.dataset.sumar;
+    const p=state.attendees.find(a=>a.code===code);
+    if(!p) return;
+    const used=(p.usedEntries||0)+(localCounts[code]||0);
+    if(used>=p.totalEntries) return;
+    localCounts[code]=(localCounts[code]||0)+1;
     render();
-  });
-  q("#btnConfirmarEntradas")?.addEventListener("click",async()=>{
-    if(!state.scanMsg) return;
-    const {code,pendingAdds}=state.scanMsg;
-    if(!pendingAdds||!code) return;
+  }));
+  document.querySelectorAll("[data-confirmar]").forEach(el=>el.addEventListener("click",async e=>{
+    e.stopPropagation();
+    const code=el.dataset.confirmar;
+    const local=localCounts[code]||0;
+    if(!local) return;
     state.saving=true;render();
     try{
       const d=await getData();
-      const fresh=d.attendees||[];
-      const idx=fresh.findIndex(a=>a.code===code);
-      if(idx!==-1){
-        const updated=fresh.map((a,i)=>i===idx?{...a,usedEntries:(a.usedEntries||0)+pendingAdds}:a);
-        await setData({...d,attendees:updated});
-        state.attendees=updated;
-      }
-    }catch{}
-    state.scanMsg=null;state.saving=false;render();
-  });
+      const updated=(d.attendees||[]).map(a=>a.code===code?{...a,usedEntries:(a.usedEntries||0)+local}:a);
+      await setData({...d,attendees:updated});
+      state.attendees=updated;
+      delete localCounts[code];
+    }catch(e){console.error(e);}
+    state.saving=false;render();
+  }));
   document.querySelectorAll("[data-entrada]").forEach(el=>el.addEventListener("click",e=>{
     e.stopPropagation();doValidar(el.dataset.entrada);
   }));
@@ -670,7 +665,7 @@ async function doValidar(code){
     state.saving=true;
     await setData({...d,attendees:updated});
     state.attendees=updated;state.saving=false;
-    state.scanMsg={type:"ok",text:p.nombre,entrada:p.totalEntries-(left-1),total:p.totalEntries,left:left-1,code:c};
+    state.scanMsg={type:"ok",text:p.nombre,entrada:p.usedEntries+1,usedLocal:p.usedEntries+1,total:p.totalEntries,left:left-1,code:c,pendingAdds:0};
     state.manualCode="";render();
   }catch(e){state.scanMsg={type:"error",text:"Error de conexión"};render();}
 }
