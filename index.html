@@ -35,7 +35,7 @@
     .panel.warn-border{border:1.5px solid #ffb400}
     .error{color:#ff6b6b;font-size:12px;margin-bottom:10px}
     .tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-    .ticket{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);border-radius:16px;padding:14px;color:#fff;max-width:320px;margin:10px auto;position:relative;overflow:hidden}
+    .ticket{background:linear-gradient(135deg,#1a1a2e,#16213e,#0f3460);border-radius:16px;padding:14px;color:#fff;max-width:320px;margin:10px auto}
     .entries{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
     .entry-dot{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700}
     .msg{border-radius:12px;padding:14px;margin-bottom:14px}
@@ -57,12 +57,14 @@ const BIN_ID="69ebd16436566621a8eadb62";
 const PASS_ADMIN="admin123";
 const PASS_PUERTA="puerta2024";
 const PRECIO_KEY="ftb_precio";
+const ACCESS_KEY="ftb_access_codes";
 
 let state={
   view:"login",attendees:[],saving:false,loading:false,
   tab:"lista",search:"",scanMsg:null,manualCode:"",
   selectedTicket:null,precio:parseInt(localStorage.getItem(PRECIO_KEY)||"35000"),
-  editandoPrecio:false,editPromos:{},pollInterval:null,passErr:""
+  editandoPrecio:false,editPromos:{},pollInterval:null,passErr:"",
+  accessCodeUsing:null
 };
 
 function genCode(){
@@ -78,6 +80,13 @@ function genAccessCode(){
   for(let i=0;i<5;i++) s+=c[Math.floor(Math.random()*c.length)];
   return s;
 }
+
+function getAccessCodes(){
+  try{return JSON.parse(localStorage.getItem(ACCESS_KEY)||"[]");}catch{return[];}
+}
+function saveAccessCodes(codes){localStorage.setItem(ACCESS_KEY,JSON.stringify(codes));}
+function validateAccessCode(code){return getAccessCodes().includes(code.toUpperCase());}
+function consumeAccessCode(code){saveAccessCodes(getAccessCodes().filter(c=>c!==code.toUpperCase()));}
 
 async function getData(){
   const r=await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{headers:{"X-Master-Key":JSONBIN_KEY}});
@@ -102,22 +111,7 @@ function exportCSV(){
   URL.revokeObjectURL(u);
 }
 
-const ACCESS_KEY="ftb_access_codes";
-
-function getAccessCodes(){
-  try{return JSON.parse(localStorage.getItem(ACCESS_KEY)||"[]");}catch{return[];}
-}
-function saveAccessCodes(codes){
-  localStorage.setItem(ACCESS_KEY,JSON.stringify(codes));
-}
-function validateAccessCode(code){
-  const codes=getAccessCodes();
-  return codes.includes(code.toUpperCase());
-}
-function consumeAccessCode(code){
-  const codes=getAccessCodes().filter(c=>c!==code.toUpperCase());
-  saveAccessCodes(codes);
-}
+function renderQR(el,code,size=90){
   el.innerHTML="";
   new QRCode(el,{text:code,width:size,height:size,colorDark:"#1a1a2e",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
 }
@@ -149,6 +143,7 @@ function render(){
   const root=document.getElementById("root");
   if(state.view==="login") root.innerHTML=renderLogin();
   else if(state.view==="registro") root.innerHTML=renderRegistro();
+  else if(state.view==="registro2") root.innerHTML=renderRegistro2();
   else if(state.view==="admin") root.innerHTML=renderAdmin();
   else if(state.view==="puerta") root.innerHTML=renderPuerta();
   bindEvents();
@@ -173,8 +168,8 @@ function renderLogin(){
   </div></div>`;
 }
 
-function renderRegistro(err, step=1){
-  if(step===1) return `<div class="center"><div class="card">
+function renderRegistro(err){
+  return `<div class="center"><div class="card">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:3rem">🌴</div>
       <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
@@ -186,7 +181,9 @@ function renderRegistro(err, step=1){
     <div style="font-size:11px;color:#555;text-align:center;margin-top:14px;line-height:1.5">El código te lo enviamos por WhatsApp al confirmar tu pago 🎉</div>
     <div style="text-align:center;margin-top:12px"><a href="#" id="lnkVolver">← Volver</a></div>
   </div></div>`;
+}
 
+function renderRegistro2(err){
   return `<div class="center"><div class="card">
     <div style="text-align:center;margin-bottom:24px">
       <div style="font-size:3rem">🌴</div>
@@ -225,6 +222,7 @@ function renderAdmin(){
   const totalAsistentes=pagados.reduce((s,a)=>s+(a.totalEntries||0),0);
   const desglose={};
   pagados.forEach(a=>{const p=a.promos||0;desglose[p]=(desglose[p]||0)+1;});
+  const accessCodes=getAccessCodes();
 
   return `<div class="max700" style="padding:1rem">
     <div class="row" style="margin-bottom:16px">
@@ -248,21 +246,24 @@ function renderAdmin(){
         <div style="font-size:13px;font-weight:600">🔑 Códigos de acceso al formulario</div>
         <button class="btn sm" id="btnGenAcceso">+ Generar código</button>
       </div>
-      <div id="accessCodesList">
-        ${(()=>{
-          const codes=getAccessCodes();
-          if(codes.length===0) return `<div style="font-size:12px;color:#555">No hay códigos generados</div>`;
-          return codes.map(c=>`
-            <div class="row" style="padding:6px 0;border-bottom:1px solid #222">
-              <div style="font-family:monospace;font-size:14px;color:#ffb400;font-weight:700">${c}</div>
-              <div style="display:flex;gap:8px">
-                <button class="btn sm" data-copiar="${c}">Copiar</button>
-                <button class="btn sm red" data-borrar-acceso="${c}">🗑</button>
-              </div>
-            </div>
-          `).join("");
-        })()}
+      ${accessCodes.length===0?`<div style="font-size:12px;color:#555">No hay códigos generados — genera uno y envíalo al comprador</div>`:""}
+      ${accessCodes.map(c=>`
+        <div class="row" style="padding:8px 0;border-bottom:1px solid #222">
+          <div style="font-family:monospace;font-size:15px;color:#ffb400;font-weight:700;letter-spacing:2px">${c}</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn sm" data-copiar="${c}">Copiar</button>
+            <button class="btn sm red" data-borrar-acceso="${c}">🗑</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+
+    <div class="panel row" style="margin-bottom:16px">
+      <div>
+        <div style="font-size:13px;font-weight:600">📋 Formulario de registro</div>
+        <div style="font-size:12px;color:#aaa;margin-top:2px">Envíale este link al comprador junto con su código</div>
       </div>
+      <button class="btn sm" id="btnEnviarLink">📲 Enviar link</button>
     </div>
 
     <div class="tabs">
@@ -366,7 +367,7 @@ function renderAdmin(){
               </div>
             </div>
             ${!p.pendienteAprobacion?`
-              <div style="margin-top:8px;display:flex;gap:8px">
+              <div style="margin-top:8px">
                 <button class="btn full" style="font-size:12px;padding:7px 0" data-wa="${p.code}">📲 Enviar ticket por WhatsApp</button>
               </div>
               <div style="margin-top:6px;cursor:pointer" data-toggle="${p.code}">
@@ -435,6 +436,31 @@ function renderPuerta(){
 function bindEvents(){
   q("#btnAdmin")?.addEventListener("click",()=>doLogin("admin"));
   q("#btnPuerta")?.addEventListener("click",()=>doLogin("puerta"));
+  q("#btnRegistro")?.addEventListener("click",()=>{state.view="registro";render();});
+  q("#pass")?.addEventListener("keydown",e=>{if(e.key==="Enter")doLogin("admin");});
+  q("#btnValidarAcceso")?.addEventListener("click",()=>{
+    const code=(q("#reg_acceso")?.value||"").trim().toUpperCase();
+    if(!validateAccessCode(code)){document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado");bindEvents();return;}
+    state.accessCodeUsing=code;
+    state.view="registro2";render();
+  });
+  q("#reg_acceso")?.addEventListener("keydown",e=>{if(e.key==="Enter")q("#btnValidarAcceso")?.click();});
+  q("#lnkVolver")?.addEventListener("click",e=>{e.preventDefault();state.view="login";render();});
+  q("#btnEnviarReg")?.addEventListener("click",doRegistro);
+  q("#btnExport")?.addEventListener("click",exportCSV);
+  q("#btnBorrarTodo")?.addEventListener("click",()=>{
+    if(confirm("⚠️ ¿Seguro que quieres borrar TODOS los registros? Esta acción no se puede deshacer.")) doBorrarTodo();
+  });
+  q("#btnSalirAdmin")?.addEventListener("click",salir);
+  q("#btnEnviarLink")?.addEventListener("click",()=>{
+    const msg=`Hola! 🌴 Ya confirmamos tu pago para la Fiesta Tropical de Buseta.\n\nPara quedar inscrito, abre este link e ingresa tu código de acceso:\n\nhttps://fiesta-tropical-buseta.vercel.app\n\n¡Nos vemos en la fiesta! 🎉`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
+  });
+  q("#btnEditarPrecio")?.addEventListener("click",()=>{state.editandoPrecio=true;render();});
+  q("#btnGuardarPrecio")?.addEventListener("click",()=>{
+    const v=parseInt(q("#inputPrecio").value)||35000;
+    state.precio=v;state.editandoPrecio=false;localStorage.setItem(PRECIO_KEY,v);render();
+  });
   q("#btnGenAcceso")?.addEventListener("click",()=>{
     const code=genAccessCode();
     const codes=getAccessCodes();
@@ -448,33 +474,9 @@ function bindEvents(){
     setTimeout(()=>{el.textContent="Copiar";},2000);
   }));
   document.querySelectorAll("[data-borrar-acceso]").forEach(el=>el.addEventListener("click",()=>{
-    const codes=getAccessCodes().filter(c=>c!==el.dataset.borrarAcceso);
-    saveAccessCodes(codes);
+    saveAccessCodes(getAccessCodes().filter(c=>c!==el.dataset.borrarAcceso));
     render();
   }));
-  q("#btnValidarAcceso")?.addEventListener("click",()=>{
-    const code=(q("#reg_acceso")?.value||"").trim().toUpperCase();
-    if(!validateAccessCode(code)){document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado",1);bindEvents();return;}
-    state.accessCodeUsing=code;
-    document.getElementById("root").innerHTML=renderRegistro("",2);
-    bindEvents();
-  });
-  q("#reg_acceso")?.addEventListener("keydown",e=>{if(e.key==="Enter"){q("#btnValidarAcceso")?.click();}});
-  q("#lnkVolver")?.addEventListener("click",e=>{e.preventDefault();state.view="login";render();});
-  q("#btnExport")?.addEventListener("click",exportCSV);
-  q("#btnBorrarTodo")?.addEventListener("click",()=>{
-    if(confirm("⚠️ ¿Seguro que quieres borrar TODOS los registros? Esta acción no se puede deshacer.")) doBorrarTodo();
-  });
-  q("#btnSalirAdmin")?.addEventListener("click",salir);
-  q("#btnEnviarLink")?.addEventListener("click",()=>{
-    const msg=`Hola! 🌴 Ya confirmamos tu pago para la Fiesta Tropical de Buseta.\n\nPara quedar inscrito en la lista, abre este link y completa tus datos:\n\nhttps://fiesta-tropical-buseta.vercel.app\n\n¡Nos vemos en la fiesta! 🎉`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`,"_blank");
-  });
-  q("#btnEditarPrecio")?.addEventListener("click",()=>{state.editandoPrecio=true;render();});
-  q("#btnGuardarPrecio")?.addEventListener("click",()=>{
-    const v=parseInt(q("#inputPrecio").value)||35000;
-    state.precio=v;state.editandoPrecio=false;localStorage.setItem(PRECIO_KEY,v);render();
-  });
   q("#searchInput")?.addEventListener("input",e=>{state.search=e.target.value;render();});
   document.querySelectorAll("[data-tab]").forEach(el=>el.addEventListener("click",()=>{state.tab=el.dataset.tab;render();}));
   document.querySelectorAll("[data-aprobar]").forEach(el=>el.addEventListener("click",()=>doAprobar(el.dataset.aprobar)));
@@ -535,17 +537,17 @@ async function doRegistro(){
   const cedula=q("#reg_cedula").value.trim();
   const telefono=q("#reg_telefono").value.trim();
   const correo=q("#reg_correo").value.trim();
-  if(!nombre||!cedula||!telefono||!correo){document.getElementById("root").innerHTML=renderRegistro("Por favor completa todos los campos");bindEvents();return;}
+  if(!nombre||!cedula||!telefono||!correo){document.getElementById("root").innerHTML=renderRegistro2("Por favor completa todos los campos");bindEvents();return;}
   q("#btnEnviarReg").disabled=true;q("#btnEnviarReg").textContent="Enviando...";
   try{
     const data=await getData();
-    if(data.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro("Ya existe un registro con esa cédula");bindEvents();return;}
+    if(data.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro2("Ya existe un registro con esa cédula");bindEvents();return;}
     const person={nombre,cedula,telefono,correo,code:genCode(),totalEntries:0,usedEntries:0,promos:0,pagado:false,pendienteAprobacion:true,fecha:new Date().toLocaleDateString("es-CO")};
     await setData([...data,person]);
     if(state.accessCodeUsing) consumeAccessCode(state.accessCodeUsing);
     state.accessCodeUsing=null;
     renderRegistroOk(nombre);
-  }catch(e){document.getElementById("root").innerHTML=renderRegistro("Error al guardar: "+e.message);bindEvents();}
+  }catch(e){document.getElementById("root").innerHTML=renderRegistro2("Error al guardar: "+e.message);bindEvents();}
 }
 
 async function doBorrarTodo(){
