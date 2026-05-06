@@ -64,7 +64,8 @@ let state={
   tab:"lista",search:"",scanMsg:null,manualCode:"",
   selectedTicket:null,precio:parseInt(localStorage.getItem(PRECIO_KEY)||"35000"),
   editandoPrecio:false,editPromos:{},pollInterval:null,passErr:"",
-  accessCodeUsing:null
+  accessCodeUsing:null,
+  accessCodes:[]
 };
 
 function genCode(){
@@ -91,14 +92,37 @@ function consumeAccessCode(code){saveAccessCodes(getAccessCodes().filter(c=>c!==
 async function getData(){
   const r=await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`,{headers:{"X-Master-Key":JSONBIN_KEY}});
   const j=await r.json();
-  return j.record?.attendees||[];
+  return j.record||{attendees:[],accessCodes:[]};
 }
 
-async function setData(attendees){
+async function setData(data){
   await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
     method:"PUT",headers:{"Content-Type":"application/json","X-Master-Key":JSONBIN_KEY},
-    body:JSON.stringify({attendees})
+    body:JSON.stringify(data)
   });
+}
+
+async function getAttendees(){const d=await getData();return d.attendees||[];}
+async function getAccessCodesRemote(){const d=await getData();return d.accessCodes||[];}
+
+async function saveAttendees(attendees){
+  const d=await getData();
+  await setData({...d,attendees});
+}
+
+async function saveAccessCodesRemote(accessCodes){
+  const d=await getData();
+  await setData({...d,accessCodes});
+}
+
+async function validateAccessCodeRemote(code){
+  const codes=await getAccessCodesRemote();
+  return codes.includes(code.toUpperCase());
+}
+
+async function consumeAccessCodeRemote(code){
+  const codes=await getAccessCodesRemote();
+  await saveAccessCodesRemote(codes.filter(c=>c!==code.toUpperCase()));
 }
 
 function exportCSV(){
@@ -157,13 +181,8 @@ function renderLogin(){
       <div style="font-size:1.3rem;font-weight:600;color:#ffb400;margin-top:8px;text-transform:uppercase;letter-spacing:1px">Fiesta Tropical de Buseta</div>
       <div style="font-size:13px;color:#aaa;margin-top:4px">Sistema de gestión de tickets</div>
     </div>
-    <input id="pass" type="password" placeholder="Contraseña (admin o puerta)" />
+    <input id="pass" type="password" placeholder="Contraseña" />
     ${state.passErr?`<div class="error">${state.passErr}</div>`:""}
-    <div class="grid2" style="margin-bottom:10px">
-      <button class="btn full" id="btnAdmin">Admin</button>
-      <button class="btn full" id="btnPuerta">Puerta</button>
-    </div>
-    <button class="btn full" id="btnRegistro" style="font-size:13px">🎟️ Registrar mis Boletas</button>
   </div></div>`;
 }
 
@@ -221,7 +240,7 @@ function renderAdmin(){
   const totalAsistentes=pagados.reduce((s,a)=>s+(a.totalEntries||0),0);
   const desglose={};
   pagados.forEach(a=>{const p=a.promos||0;desglose[p]=(desglose[p]||0)+1;});
-  const accessCodes=getAccessCodes();
+  const accessCodes=state.accessCodes||[];
 
   return `<div class="max700" style="padding:1rem">
     <div class="row" style="margin-bottom:16px">
@@ -437,9 +456,12 @@ function bindEvents(){
   q("#btnPuerta")?.addEventListener("click",()=>doLogin("puerta"));
   q("#btnRegistro")?.addEventListener("click",()=>{state.view="registro";render();});
   q("#pass")?.addEventListener("keydown",e=>{if(e.key==="Enter")doLogin("admin");});
-  q("#btnValidarAcceso")?.addEventListener("click",()=>{
+  q("#btnValidarAcceso")?.addEventListener("click",async()=>{
     const code=(q("#reg_acceso")?.value||"").trim().toUpperCase();
-    if(!validateAccessCode(code)){document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado");bindEvents();return;}
+    const btn=q("#btnValidarAcceso");
+    if(btn){btn.disabled=true;btn.textContent="Validando...";}
+    const valid=await validateAccessCodeRemote(code);
+    if(!valid){document.getElementById("root").innerHTML=renderRegistro("Código inválido o ya usado");bindEvents();return;}
     state.accessCodeUsing=code;
     state.view="registro2";render();
   });
@@ -460,11 +482,11 @@ function bindEvents(){
     const v=parseInt(q("#inputPrecio").value)||35000;
     state.precio=v;state.editandoPrecio=false;localStorage.setItem(PRECIO_KEY,v);render();
   });
-  q("#btnGenAcceso")?.addEventListener("click",()=>{
+  q("#btnGenAcceso")?.addEventListener("click",async()=>{
     const code=genAccessCode();
-    const codes=getAccessCodes();
-    codes.push(code);
-    saveAccessCodes(codes);
+    const codes=await getAccessCodesRemote();
+    await saveAccessCodesRemote([...codes,code]);
+    state.accessCodes=[...codes,code];
     render();
   });
   document.querySelectorAll("[data-copiar]").forEach(el=>el.addEventListener("click",()=>{
@@ -472,8 +494,10 @@ function bindEvents(){
     el.textContent="✓ Copiado";
     setTimeout(()=>{el.textContent="Copiar";},2000);
   }));
-  document.querySelectorAll("[data-borrar-acceso]").forEach(el=>el.addEventListener("click",()=>{
-    saveAccessCodes(getAccessCodes().filter(c=>c!==el.dataset.borrarAcceso));
+  document.querySelectorAll("[data-borrar-acceso]").forEach(el=>el.addEventListener("click",async()=>{
+    const updated=(await getAccessCodesRemote()).filter(c=>c!==el.dataset.borrarAcceso);
+    await saveAccessCodesRemote(updated);
+    state.accessCodes=updated;
     render();
   }));
   q("#searchInput")?.addEventListener("input",e=>{state.search=e.target.value;render();});
@@ -525,10 +549,21 @@ function salir(){
 
 async function loadAndPoll(){
   state.loading=true;render();
-  try{state.attendees=await getData();}catch{}
+  try{
+    const d=await getData();
+    state.attendees=d.attendees||[];
+    state.accessCodes=d.accessCodes||[];
+  }catch{}
   state.loading=false;render();
   clearInterval(state.pollInterval);
-  state.pollInterval=setInterval(async()=>{try{state.attendees=await getData();render();}catch{}},6000);
+  state.pollInterval=setInterval(async()=>{
+    try{
+      const d=await getData();
+      state.attendees=d.attendees||[];
+      state.accessCodes=d.accessCodes||[];
+      render();
+    }catch{}
+  },6000);
 }
 
 async function doRegistro(){
@@ -540,10 +575,10 @@ async function doRegistro(){
   q("#btnEnviarReg").disabled=true;q("#btnEnviarReg").textContent="Enviando...";
   try{
     const data=await getData();
-    if(data.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro2("Ya existe un registro con esa cédula");bindEvents();return;}
+    if(data.attendees?.find(a=>a.cedula===cedula)){document.getElementById("root").innerHTML=renderRegistro2("Ya existe un registro con esa cédula");bindEvents();return;}
     const person={nombre,cedula,telefono,correo,code:genCode(),totalEntries:0,usedEntries:0,promos:0,pagado:false,pendienteAprobacion:true,fecha:new Date().toLocaleDateString("es-CO")};
-    await setData([...data,person]);
-    if(state.accessCodeUsing) consumeAccessCode(state.accessCodeUsing);
+    await setData({...data,attendees:[...(data.attendees||[]),person]});
+    if(state.accessCodeUsing) await consumeAccessCodeRemote(state.accessCodeUsing);
     state.accessCodeUsing=null;
     renderRegistroOk(nombre);
   }catch(e){document.getElementById("root").innerHTML=renderRegistro2("Error al guardar: "+e.message);bindEvents();}
